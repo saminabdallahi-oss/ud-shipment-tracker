@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Shipment Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal:       #00857c;
+    --teal-lt:    #00a89d;
+    --teal-dim:   rgba(0,133,124,0.1);
+    --accent2:    #2a7abf;
+    --warn:       #c47f00;
+    --danger:     #c0392b;
+    --success:    #1e8f5e;
+    --bg:         #ffffff;
+    --surface:    #f7f8fa;
+    --surface2:   #eef0f3;
+    --border:     #dde1e7;
+    --border-lt:  #c8cdd6;
+    --text:       #1a2433;
+    --text-muted: #5a6a7a;
+    --text-dim:   #9aaabb;
+    --radius:     8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; padding: 0 0 72px; }
+
+  header {
+    background: #ffffff;
+    border-bottom: 2px solid var(--teal);
+    padding: 0 32px; height: 58px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 30px; height: 30px; border-radius: 6px;
+    background: var(--teal);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark svg { width: 16px; height: 16px; fill: #fff; }
+  .logo-text .top { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text); display: block; line-height: 1; }
+  .logo-text .sub { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; color: var(--teal); text-transform: uppercase; margin-top: 3px; display: block; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .stat-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 4px 11px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-muted); background: var(--surface); }
+  .stat-pill b { color: var(--text); font-weight: 600; }
+  .stat-pill.alert { border-color: var(--danger); color: var(--danger); background: rgba(192,57,43,0.07); }
+  .stat-pill.alert b { color: var(--danger); }
+  .icon-btn { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+  .icon-btn:hover { border-color: var(--teal); color: var(--teal); }
+
+  .gear-wrapper { position: relative; }
+  .gear-menu { display: none; position: absolute; top: 42px; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 10px; min-width: 230px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); z-index: 300; }
+  .gear-menu.open { display: block; }
+  .gear-menu-section { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); padding: 12px 16px 5px; }
+  .gear-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; transition: background 0.1s; }
+  .gear-item:hover { background: var(--surface); }
+  .gear-item.danger { color: var(--danger); }
+  .gear-item.danger:hover { background: rgba(192,57,43,0.06); }
+  .gear-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .gear-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  main { max-width: 1160px; margin: 0 auto; padding: 28px 24px; }
+
+  .controls { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; align-items: center; }
+  .filter-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 5px 13px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase; transition: all 0.15s; }
+  .filter-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .filter-btn.active { background: var(--teal-dim); border-color: var(--teal); color: var(--teal); }
+  .refresh-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 5px 13px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase; transition: all 0.15s; margin-left: auto; }
+  .refresh-btn:hover { border-color: var(--teal); color: var(--teal); }
+
+  .last-updated { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); text-align: right; margin-bottom: 16px; }
+  .loading-state { text-align: center; padding: 80px; color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 12px; }
+  .loading-spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 14px; }
+  @keyframes spin { 100%{transform:rotate(360deg)} }
+
+  .region-block { margin-bottom: 8px; }
+  .region-block:first-child .region-header { margin-top: 0; }
+  .region-header { display: flex; align-items: center; gap: 14px; margin: 30px 0 12px; cursor: pointer; user-select: none; }
+  .region-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--teal); font-weight: 600; white-space: nowrap; }
+  .region-line { flex: 1; height: 1px; background: var(--border); }
+  .region-meta { display: flex; align-items: center; gap: 8px; }
+  .region-count { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+  .region-chevron { font-size: 10px; color: var(--text-dim); transition: transform 0.2s; }
+  .region-block.collapsed .region-chevron { transform: rotate(-90deg); }
+  .region-centers { }
+  .region-block.collapsed .region-centers { display: none; }
+
+  .center-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; transition: border-color 0.2s; }
+  .center-section:hover { border-color: var(--border-lt,#b0bbc8); }
+  .center-section.overdue-center { border-left: 3px solid var(--danger); }
+  .center-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; cursor: pointer; user-select: none; background: var(--surface2); border-bottom: 1px solid transparent; transition: border-color 0.2s; }
+  .center-section.open .center-header { border-bottom-color: var(--border); }
+  .center-header-left { display: flex; align-items: center; gap: 10px; }
+  .center-index { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); width: 20px; }
+  .center-name { font-size: 13px; font-weight: 600; }
+  .center-rule { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-left: 4px; }
+  .center-header-right { display: flex; align-items: center; gap: 8px; }
+  .badge { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+  .badge-pending  { background: rgba(232,160,32,0.14); color: var(--warn);    border: 1px solid rgba(232,160,32,0.3); }
+  .badge-overdue  { background: rgba(217,79,79,0.14);  color: var(--danger);  border: 1px solid rgba(217,79,79,0.3); }
+  .badge-clear    { background: rgba(30,143,94,0.1);  color: var(--success); border: 1px solid rgba(30,143,94,0.25); }
+  .badge-count    { background: var(--surface); color: var(--text-dim); border: 1px solid var(--border); }
+  .chevron { color: var(--text-dim); font-size: 11px; transition: transform 0.2s; }
+  .center-section.open .chevron { transform: rotate(180deg); }
+  .center-body { display: none; padding: 0 18px 16px; }
+  .center-section.open .center-body { display: block; }
+
+  .shipments-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  .shipments-table th { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  .shipments-table td { padding: 9px 10px; font-size: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .shipments-table tr:last-child td { border-bottom: none; }
+  .shipments-table tr:hover td { background: #f4f6f9; }
+  .tracking-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent2); text-decoration: none; }
+  .tracking-num:hover { text-decoration: underline; }
+  .date-cell { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
+  .date-overdue { color: var(--danger) !important; font-weight: 600; }
+  .submitter-cell { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
+  .photo-link { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--teal); text-decoration: none; }
+  .photo-link:hover { text-decoration: underline; }
+  .status-badge { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 4px; display: inline-block; white-space: nowrap; }
+  .s-in-transit { background: rgba(42,122,191,0.1); color: #1a6aaa; border: 1px solid rgba(42,122,191,0.25); }
+  .s-delivered   { background: rgba(30,143,94,0.1);  color: var(--success); border: 1px solid rgba(30,143,94,0.25); }
+  .s-delayed     { background: rgba(232,160,32,0.14); color: var(--warn);    border: 1px solid rgba(232,160,32,0.3); }
+  .s-overdue     { background: rgba(217,79,79,0.14);  color: var(--danger);  border: 1px solid rgba(217,79,79,0.3); }
+  .s-unknown     { background: rgba(122,147,171,0.1); color: var(--text-muted); border: 1px solid var(--border); }
+  .empty-state { text-align: center; padding: 22px; color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 11px; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .modal-subtitle { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); margin-bottom: 20px; }
+  .field-group { margin-bottom: 14px; }
+  .field-label { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 5px; }
+  .modal input, .modal select { width: 100%; font-family: 'DM Mono', monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; outline: none; transition: border-color 0.15s; }
+  .modal input:focus, .modal select:focus { border-color: var(--teal); }
+  .modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  .btn-cancel  { font-family: 'Inter', sans-serif; font-size: 12px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
+  .btn-cancel:hover { color: var(--text); }
+  .btn-primary { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 6px; border: none; background: var(--teal); color: #fff; cursor: pointer; }
+  .btn-primary:hover { background: var(--teal-lt); }
+  .btn-sm      { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 5px; border: none; background: var(--teal); color: #fff; cursor: pointer; }
+  .btn-sm:hover { background: var(--teal-lt); }
+  .btn-sm.navy { background: var(--teal); }
+  .btn-sm.navy:hover { background: var(--teal); }
+  .btn-danger  { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; padding: 8px 18px; border-radius: 6px; border: none; background: var(--danger); color: #fff; cursor: pointer; }
+  .btn-danger:hover { opacity: 0.85; }
+
+  .rules-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .rules-table { width: 100%; border-collapse: collapse; }
+  .rules-table th { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  .rules-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: middle; }
+  .rules-table tr:last-child td { border-bottom: none; }
+  .rules-table input[type=number] { width: 60px; text-align: center; padding: 5px 6px; }
+  .rules-table select { width: 120px; padding: 5px 6px; }
+  .rule-note { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); margin-top: 14px; line-height: 1.6; }
+  .rule-region-tag { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); padding: 2px 6px; border-radius: 3px; border: 1px solid var(--border); }
+
+  .archive-list { max-height: 280px; overflow-y: auto; }
+  .archive-item { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: 6px; margin-bottom: 5px; background: var(--bg); border: 1px solid var(--border); font-size: 12px; }
+  .tag-archived { font-family: 'DM Mono',monospace; font-size: 9px; padding: 2px 6px; border-radius: 3px; background: rgba(122,147,171,0.12); color: var(--text-dim); border: 1px solid var(--border); margin-left: 8px; }
+  .sm-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 3px 9px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-muted); transition: all 0.15s; }
+  .sm-btn.restore:hover { color: var(--teal); border-color: var(--teal); }
+  .sm-btn.remove:hover  { color: var(--danger);  border-color: var(--danger); }
+
+  .deliver-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,133,124,0.35); background: rgba(0,133,124,0.07); color: var(--teal); transition: all 0.15s; white-space: nowrap; }
+  .deliver-btn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
+  .delivered-by { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--success); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="#fff" stroke-width="1.5" opacity=".5"/><circle cx="9" cy="9" r="3.5" fill="#fff"/></svg>
+    </div>
+    <div class="logo-text">
+      <span class="top">Lab Shipment Tracker</span>
+      <span class="sub">UD Path Lab // Shipment Log</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="stat-pill">Centers: <b id="stat-centers">—</b></div>
+    <div class="stat-pill">In Transit: <b id="stat-transit">—</b></div>
+    <div class="stat-pill alert" id="pill-overdue" style="display:none">Overdue: <b id="stat-overdue">0</b></div>
+    <div class="gear-wrapper">
+      <button class="icon-btn" onclick="toggleGear()" title="Settings">&#9881;</button>
+      <div class="gear-menu" id="gear-menu">
+        <div class="gear-menu-section">Centers</div>
+        <button class="gear-item" onclick="gearAction('add-center')"><span class="gear-icon">&#43;</span> Add Center</button>
+        <button class="gear-item" onclick="gearAction('manage-centers')"><span class="gear-icon">&#9776;</span> Manage Centers</button>
+        <div class="gear-divider"></div>
+        <div class="gear-menu-section">Rules</div>
+        <button class="gear-item" onclick="gearAction('delivery-rules')"><span class="gear-icon">&#8987;</span> Delivery Rules</button>
+        <button class="gear-item" onclick="gearAction('notifications')"><span class="gear-icon">&#9993;</span> Notification Recipients</button>
+        <div class="gear-divider"></div>
+        <div class="gear-menu-section">Data</div>
+        <button class="gear-item" onclick="gearAction('export')"><span class="gear-icon">&#8659;</span> Export Log (CSV)</button>
+        <button class="gear-item danger" onclick="gearAction('clear-delivered')"><span class="gear-icon">&#215;</span> Clear Delivered</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('overdue',this)">Overdue</button>
+    <button class="filter-btn" onclick="setFilter('delivered',this)">Delivered</button>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadData()">&#8635; Refresh</button>
+  </div>
+  <div id="last-updated" class="last-updated" style="display:none"></div>
+  <div id="centers-container">
+    <div class="loading-state"><div class="loading-spinner"></div><br>Loading shipments...</div>
+  </div>
+</main>
+
+<!-- ADD CENTER MODAL -->
+<div class="modal-overlay" id="modal-add-center">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">Add Center</div>
+    <div class="modal-subtitle">New center will inherit default delivery rule for its region.</div>
+    <div class="field-group">
+      <div class="field-label">Center Name</div>
+      <input type="text" id="new-center-name" placeholder="e.g. Savannah Endoscopy" />
+    </div>
+    <div class="field-group">
+      <div class="field-label">Region</div>
+      <select id="new-center-region">
+        <option value="GA">Georgia</option>
+        <option value="FL">Florida</option>
+      </select>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-add-center')">Cancel</button>
+      <button class="btn-primary" onclick="confirmAddCenter()">Add Center</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANAGE CENTERS MODAL -->
+<div class="modal-overlay" id="modal-manage-centers">
+  <div class="modal" style="width:480px">
+    <div class="modal-title">Manage Centers</div>
+    <div class="modal-subtitle">Archive centers to hide them. Shipment history is always preserved.</div>
+    <div class="archive-list" id="manage-list"></div>
+    <div class="modal-btns"><button class="btn-cancel" onclick="closeModal('modal-manage-centers')">Close</button></div>
+  </div>
+</div>
+
+<!-- DELIVERY RULES MODAL -->
+<div class="modal-overlay" id="modal-delivery-rules">
+  <div class="modal" style="width:580px">
+    <div class="modal-title">Delivery Rules</div>
+    <div class="modal-subtitle">Controls when a shipment is flagged as overdue. Set per center or apply defaults to a whole region.</div>
+    <div class="rules-toolbar">
+      <button class="btn-sm" onclick="applyRuleToRegion('GA',0,'same-day')">Set all GA: Same Day</button>
+      <button class="btn-sm navy" onclick="applyRuleToRegion('FL',2,'business')">Set all FL: 2 Business Days</button>
+    </div>
+    <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
+      <table class="rules-table">
+        <thead><tr><th>Center</th><th>Region</th><th>Days</th><th>Day Type</th></tr></thead>
+        <tbody id="rules-tbody"></tbody>
+      </table>
+    </div>
+    <div class="rule-note">
+      Same Day — shipment must arrive same calendar day as ship date.<br>
+      Business Days — excludes Saturday and Sunday.<br>
+      Calendar Days — counts all days including weekends.<br>
+      Enter 0 days to treat as Same Day regardless of type selection.
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-delivery-rules')">Cancel</button>
+      <button class="btn-primary" onclick="saveDeliveryRules()">Save Rules</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLEAR DELIVERED MODAL -->
+<div class="modal-overlay" id="modal-clear-delivered">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">Clear Delivered Shipments</div>
+    <div class="modal-subtitle">Removes delivered entries from this view. Data remains in your Excel sheet.</div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-clear-delivered')">Cancel</button>
+      <button class="btn-danger" onclick="confirmClearDelivered()">Clear All Delivered</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATIONS MODAL -->
+<div class="modal-overlay" id="modal-notifications">
+  <div class="modal" style="width:580px">
+    <div class="modal-title">Notification Recipients</div>
+    <div class="modal-subtitle">Overdue alerts are emailed daily — GA at 6AM, FL at 5PM. Set recipients per center and lab-wide contacts below.</div>
+
+    <div style="margin-bottom:20px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Lab Staff (receives all alerts)</div>
+      <div id="lab-recipients-list" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <input type="email" id="new-lab-email" placeholder="lab@example.com" style="flex:1" />
+        <button class="btn-sm" onclick="addLabEmail()">Add</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Reply-To Address</div>
+      <input type="email" id="reply-to-email" placeholder="e.g. pathlab@udgi.com" />
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:4px">Endo centers will reply to this address when they respond to alerts.</div>
+    </div>
+
+    <div class="gear-divider" style="margin:16px 0"></div>
+
+    <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Per-Center Endo Contacts</div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+      <select id="notif-center-select" style="flex:1">
+        <option value="">Select a center...</option>
+      </select>
+    </div>
+    <div id="center-notif-area" style="display:none">
+      <div id="center-email-list" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <input type="email" id="new-center-email" placeholder="contact@endocenter.com" style="flex:1" />
+        <button class="btn-sm" onclick="addCenterEmail()">Add</button>
+      </div>
+    </div>
+    <div id="center-notif-placeholder" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);padding:12px 0">Select a center above to manage its contacts.</div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-notifications')">Cancel</button>
+      <button class="btn-primary" onclick="saveNotifications()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MARK DELIVERED MODAL -->
+<div class="modal-overlay" id="modal-mark-delivered">
+  <div class="modal" style="width:340px">
+    <div class="modal-title">Mark as Delivered</div>
+    <div class="modal-subtitle">Enter your name or initials to confirm receipt.</div>
+    <div class="field-group">
+      <div class="field-label">Confirmed By</div>
+      <input type="text" id="deliver-name" placeholder="e.g. SAM or Sam Johnson" maxlength="40" />
+    </div>
+    <div id="deliver-shipment-info" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);margin-bottom:4px;padding:10px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-mark-delivered')">Cancel</button>
+      <button class="btn-primary" onclick="confirmMarkDelivered()">Confirm Delivery</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA_URL = "https://uniteddigestive.sharepoint.com/sites/PathologyTeam/Shared%20Documents/Dashboard%20Files/shipments.json";
+
+const GA_CENTERS = [
+  "Athens-Clarke County Endoscopy","DeKalb Gastroenterology Endoscopy",
+  "Digestive Care Endoscopy","Hall County","Johns Creek Endoscopy",
+  "Midtown Endoscopy","Newnan","Northern Crescent Endoscopy",
+  "Northwest Endoscopy","Panola","Southern Crescent Endoscopy",
+  "Spalding","The Endoscopy Center","Wellbrook Conyers",
+  "Wellbrook Convington","West Metro","Woodstock"
+];
+const FL_CENTERS = [
+  "Barkley Surgicenter","Cape Health Surgery Center","Currency",
+  "Fort Myers Surgery Center","Gulfshore Endoscopy Center",
+  "Wellness","West Florida"
+];
+
+const VER = 'v10';
+let centers       = JSON.parse(localStorage.getItem('ud-centers-'+VER)  || 'null') || [...GA_CENTERS,...FL_CENTERS];
+let centerRegion  = JSON.parse(localStorage.getItem('ud-regions-'+VER)  || 'null') || buildDefaultRegions();
+let archived      = JSON.parse(localStorage.getItem('ud-archived-'+VER) || '[]');
+let hiddenDel     = JSON.parse(localStorage.getItem('ud-hidden-'+VER)   || '[]');
+let deliveryRules = JSON.parse(localStorage.getItem('ud-rules-'+VER)    || 'null') || buildDefaultRules();
+let deliveredLog  = JSON.parse(localStorage.getItem('ud-dlvlog-'+VER)   || '{}');
+// notifSettings: { labEmails: [], replyTo: '', centerEmails: { centerName: [] } }
+let notifSettings = JSON.parse(localStorage.getItem('ud-notif-'+VER)    || 'null') || { labEmails: [], replyTo: '', centerEmails: {} };
+let allShipments  = [];
+let currentFilter = 'all';
+let pendingDeliverId = null;
+
+function buildDefaultRegions() {
+  const r = {};
+  GA_CENTERS.forEach(c => r[c] = 'GA');
+  FL_CENTERS.forEach(c => r[c] = 'FL');
+  return r;
+}
+function buildDefaultRules() {
+  const r = {};
+  GA_CENTERS.forEach(c => r[c] = { days: 0, type: 'same-day' });
+  FL_CENTERS.forEach(c => r[c] = { days: 2, type: 'business' });
+  return r;
+}
+function saveLocal() {
+  localStorage.setItem('ud-centers-'+VER,  JSON.stringify(centers));
+  localStorage.setItem('ud-regions-'+VER,  JSON.stringify(centerRegion));
+  localStorage.setItem('ud-archived-'+VER, JSON.stringify(archived));
+  localStorage.setItem('ud-hidden-'+VER,   JSON.stringify(hiddenDel));
+  localStorage.setItem('ud-rules-'+VER,    JSON.stringify(deliveryRules));
+  localStorage.setItem('ud-dlvlog-'+VER,   JSON.stringify(deliveredLog));
+  localStorage.setItem('ud-notif-'+VER,    JSON.stringify(notifSettings));
+}
+
+const todayStr = () => new Date().toISOString().split('T')[0];
+function cid(n) { return (n||'').toLowerCase().replace(/[^a-z0-9]/g,'-'); }
+
+function addBusinessDays(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00');
+  if (isNaN(d)) return null;
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate()+1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d.toISOString().split('T')[0];
+}
+
+function expectedDelivery(shipDate, centerName) {
+  if (!shipDate) return null;
+  const rule = deliveryRules[centerName] || { days: 0, type: 'same-day' };
+  if (!rule.days || rule.type === 'same-day') return shipDate;
+  if (rule.type === 'business') return addBusinessDays(shipDate, rule.days);
+  const d = new Date(shipDate + 'T12:00:00');
+  if (isNaN(d)) return null;
+  d.setDate(d.getDate() + rule.days);
+  return d.toISOString().split('T')[0];
+}
+
+function isOverdue(s) {
+  if (s.status === 'Delivered') return false;
+  const exp = expectedDelivery(s.shipDate, s.center);
+  return exp ? exp < todayStr() : false;
+}
+
+function ruleLabel(name) {
+  const rule = deliveryRules[name];
+  if (!rule || !rule.days || rule.type === 'same-day') return 'same day';
+  return rule.days + 'd ' + (rule.type === 'business' ? 'biz' : 'cal');
+}
+
+function carrierLink(t, c) {
+  if (c === 'FedEx') return `https://www.fedex.com/apps/fedextrack/?tracknumbers=${t}`;
+  if (c === 'UPS')   return `https://www.ups.com/track?tracknum=${t}`;
+  return '#';
+}
+function statusClass(s) {
+  return {'In Transit':'s-in-transit','Delivered':'s-delivered','Delayed':'s-delayed','Overdue':'s-overdue'}[s] || 's-unknown';
+}
+
+function excelDateToString(val) {
+  if (!val) return '';
+  const num = parseInt(val);
+  if (isNaN(num)) return String(val);
+  // Excel serial date: days since Jan 0, 1900 (with Lotus 1-2-3 bug)
+  const date = new Date((num - 25569) * 86400 * 1000);
+  return (date.getMonth()+1) + '/' + date.getDate() + '/' + date.getFullYear();
+}
+
+function parseSharePointItem(item, i) {
+  // Internal column names confirmed from SharePoint List Settings URLs
+  const center = (String(item['Endo Center - FL']||'').trim() || String(item['Endo Center - GA']||'').trim());
+  if (!center || center.toLowerCase() === 'n/a') return null;
+  const shipRaw = String(item['Ship Date']||'').trim();
+  const svcRaw  = String(item['Date of Service']||'').trim();
+  return {
+    id:          item['Id'] ? String(item['Id']) : (i + '-' + String(item['Tracking Number']||'')),
+    timestamp:   item['Completion time']||'',
+    submitter:   String(item['Name']||'').trim(),
+    center,
+    tracking:    String(item['Tracking Number']||'').trim(),
+    carrier:     String(item['Carrier']||'').trim(),
+    shipDate:    excelDateToString(shipRaw),
+    serviceDate: excelDateToString(svcRaw),
+    photo:       String(item['Label Photo']||'').trim(),
+    status:      'In Transit',
+  };
+}
+
+function loadData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.innerHTML = 'Refreshing...';
+  fetch(DATA_URL, {
+    credentials: "include",
+    method: 'GET',
+    
+    
+  })
+  .then(r => r.text())
+  .then(text => {
+    let data;
+    try { data = JSON.parse(text); } catch(e) {
+      // Power Automate string() output uses single quotes - try to fix
+      try { data = JSON.parse(text.replace(/'/g, '"')); } catch(e2) { data = []; }
+    }
+    allShipments = [];
+    const items = Array.isArray(data) ? data : (data.value || []);
+    items.forEach((item, i) => {
+      if (!String(item['TrackingNumber']||'').trim()) return;
+      const s = parseSharePointItem(item, i);
+      if (!s) return;
+      if (s.center && !centers.includes(s.center)) {
+        centers.push(s.center);
+        if (!centerRegion[s.center]) centerRegion[s.center] = 'GA';
+        if (!deliveryRules[s.center]) deliveryRules[s.center] = { days:0, type:'same-day' };
+      }
+      allShipments.push(s);
+    });
+    saveLocal();
+    const lu = document.getElementById('last-updated');
+    lu.style.display = 'block';
+    lu.textContent = 'Last synced: ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    btn.innerHTML = '&#8635; Refresh';
+    render();
+  })
+  .catch(err => {
+    console.error('Failed to load data:', err);
+    btn.innerHTML = '&#8635; Refresh';
+    render();
+  });
+}
+
+function toggleGear() { document.getElementById('gear-menu').classList.toggle('open'); }
+function gearAction(a) {
+  document.getElementById('gear-menu').classList.remove('open');
+  if      (a==='add-center')      { openModal('modal-add-center'); setTimeout(()=>document.getElementById('new-center-name').focus(),60); }
+  else if (a==='manage-centers')  { renderManageList(); openModal('modal-manage-centers'); }
+  else if (a==='delivery-rules')  { renderRulesTable(); openModal('modal-delivery-rules'); }
+  else if (a==='notifications')   { openNotifications(); }
+  else if (a==='export')          { exportCSV(); }
+  else if (a==='clear-delivered') { openModal('modal-clear-delivered'); }
+}
+document.addEventListener('click', e => {
+  const gw = document.querySelector('.gear-wrapper');
+  if (gw && !gw.contains(e.target)) document.getElementById('gear-menu').classList.remove('open');
+});
+
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id==='modal-add-center') document.getElementById('new-center-name').value='';
+}
+document.querySelectorAll('.modal-overlay').forEach(el =>
+  el.addEventListener('click', function(e) { if(e.target===this) closeModal(this.id); })
+);
+
+function confirmAddCenter() {
+  const name = document.getElementById('new-center-name').value.trim();
+  const region = document.getElementById('new-center-region').value;
+  if (!name) return;
+  if (centers.includes(name)) { alert('That center already exists.'); return; }
+  centers.push(name);
+  centerRegion[name] = region;
+  deliveryRules[name] = region==='FL' ? {days:2,type:'business'} : {days:0,type:'same-day'};
+  saveLocal(); closeModal('modal-add-center'); render();
+}
+document.getElementById('new-center-name').addEventListener('keydown', e => { if(e.key==='Enter') confirmAddCenter(); });
+
+function renderManageList() {
+  const list = document.getElementById('manage-list');
+  list.innerHTML = '';
+  centers.forEach(name => {
+    const isArch = archived.includes(name);
+    const region = centerRegion[name]||'GA';
+    const div = document.createElement('div');
+    div.className = 'archive-item';
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px">
+        <span>${name}</span>
+        <span class="rule-region-tag">${region}</span>
+        ${isArch?'<span class="tag-archived">Archived</span>':''}
+      </div>
+      <div>${isArch
+        ?`<button class="sm-btn restore" onclick="restoreCenter('${name}')">Restore</button>`
+        :`<button class="sm-btn remove"  onclick="archiveCenter('${name}')">Archive</button>`
+      }</div>`;
+    list.appendChild(div);
+  });
+}
+function archiveCenter(n) { if(!archived.includes(n)) archived.push(n); saveLocal(); renderManageList(); render(); }
+function restoreCenter(n) { archived=archived.filter(a=>a!==n); saveLocal(); renderManageList(); render(); }
+
+function renderRulesTable() {
+  const tbody = document.getElementById('rules-tbody');
+  tbody.innerHTML = '';
+  centers.filter(c=>!archived.includes(c)).forEach(name => {
+    const rule = deliveryRules[name]||{days:0,type:'same-day'};
+    const region = centerRegion[name]||'GA';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${name}</td>
+      <td><span class="rule-region-tag">${region}</span></td>
+      <td><input type="number" min="0" max="30" value="${rule.days||0}" data-center="${name}" class="rule-days" /></td>
+      <td><select data-center="${name}" class="rule-type">
+        <option value="same-day" ${rule.type==='same-day'?'selected':''}>Same Day</option>
+        <option value="business" ${rule.type==='business'?'selected':''}>Business Days</option>
+        <option value="calendar" ${rule.type==='calendar'?'selected':''}>Calendar Days</option>
+      </select></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function applyRuleToRegion(region, days, type) {
+  centers.filter(c=>(centerRegion[c]||'GA')===region && !archived.includes(c))
+         .forEach(c => { deliveryRules[c]={days,type}; });
+  renderRulesTable();
+}
+
+function saveDeliveryRules() {
+  document.querySelectorAll('.rule-days').forEach(inp => {
+    const name = inp.dataset.center;
+    const days = parseInt(inp.value)||0;
+    const typeEl = document.querySelector(`.rule-type[data-center="${name}"]`);
+    const type = typeEl ? typeEl.value : 'same-day';
+    deliveryRules[name] = { days, type: days===0?'same-day':type };
+  });
+  saveLocal(); closeModal('modal-delivery-rules'); render();
+}
+
+// ── NOTIFICATIONS ──
+function openNotifications() {
+  // Populate lab emails
+  renderLabEmails();
+  // Reply-to
+  document.getElementById('reply-to-email').value = notifSettings.replyTo || '';
+  // Populate center dropdown
+  const sel = document.getElementById('notif-center-select');
+  sel.innerHTML = '<option value="">Select a center...</option>';
+  centers.filter(c=>!archived.includes(c)).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+  sel.value = '';
+  document.getElementById('center-notif-area').style.display = 'none';
+  document.getElementById('center-notif-placeholder').style.display = 'block';
+  openModal('modal-notifications');
+}
+
+function renderLabEmails() {
+  const list = document.getElementById('lab-recipients-list');
+  list.innerHTML = '';
+  (notifSettings.labEmails||[]).forEach((email,i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:5px;font-family:DM Mono,monospace;font-size:11px;';
+    row.innerHTML = `<span>${email}</span><button class="sm-btn remove" onclick="removeLabEmail(${i})" style="font-size:10px;padding:2px 7px">Remove</button>`;
+    list.appendChild(row);
+  });
+  if (!notifSettings.labEmails.length) {
+    list.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-dim);padding:6px 0">No lab recipients added yet.</div>';
+  }
+}
+
+function addLabEmail() {
+  const val = document.getElementById('new-lab-email').value.trim();
+  if (!val || !val.includes('@')) return;
+  if (!notifSettings.labEmails.includes(val)) notifSettings.labEmails.push(val);
+  document.getElementById('new-lab-email').value = '';
+  renderLabEmails();
+}
+function removeLabEmail(i) {
+  notifSettings.labEmails.splice(i,1);
+  renderLabEmails();
+}
+
+document.getElementById('notif-center-select').addEventListener('change', function() {
+  const center = this.value;
+  if (!center) {
+    document.getElementById('center-notif-area').style.display = 'none';
+    document.getElementById('center-notif-placeholder').style.display = 'block';
+    return;
+  }
+  document.getElementById('center-notif-area').style.display = 'block';
+  document.getElementById('center-notif-placeholder').style.display = 'none';
+  renderCenterEmails(center);
+});
+
+function renderCenterEmails(center) {
+  const list = document.getElementById('center-email-list');
+  list.innerHTML = '';
+  const emails = (notifSettings.centerEmails||{})[center] || [];
+  emails.forEach((email,i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:5px;font-family:DM Mono,monospace;font-size:11px;';
+    row.innerHTML = `<span>${email}</span><button class="sm-btn remove" onclick="removeCenterEmail('${center.replace(/'/g,"\\'")}',${i})" style="font-size:10px;padding:2px 7px">Remove</button>`;
+    list.appendChild(row);
+  });
+  if (!emails.length) {
+    list.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-dim);padding:6px 0">No contacts added for this center yet.</div>';
+  }
+}
+
+function addCenterEmail() {
+  const center = document.getElementById('notif-center-select').value;
+  const val = document.getElementById('new-center-email').value.trim();
+  if (!center || !val || !val.includes('@')) return;
+  if (!notifSettings.centerEmails[center]) notifSettings.centerEmails[center] = [];
+  if (!notifSettings.centerEmails[center].includes(val)) notifSettings.centerEmails[center].push(val);
+  document.getElementById('new-center-email').value = '';
+  renderCenterEmails(center);
+}
+
+function removeCenterEmail(center, i) {
+  notifSettings.centerEmails[center].splice(i,1);
+  renderCenterEmails(center);
+}
+
+function saveNotifications() {
+  notifSettings.replyTo = document.getElementById('reply-to-email').value.trim();
+  saveLocal();
+  // Notification settings saved locally — alerts handled via Power Automate
+  pushNotifSettings();
+  closeModal('modal-notifications');
+}
+
+function pushNotifSettings() {
+  // Notification settings are managed via Power Automate — saved locally only
+  console.log('Notification settings saved locally:', notifSettings);
+}
+
+document.getElementById('new-lab-email').addEventListener('keydown', e => { if(e.key==='Enter') addLabEmail(); });
+document.getElementById('new-center-email').addEventListener('keydown', e => { if(e.key==='Enter') addCenterEmail(); });
+
+function exportCSV() {
+  const rows = [['Timestamp','Submitted By','Center','Tracking #','Carrier','Ship Date','Date of Service','Expected Delivery','Status','Confirmed By','Confirmed Time','Photo']];
+  allShipments.filter(s=>!hiddenDel.includes(s.id)).forEach(s => {
+    const exp = expectedDelivery(s.shipDate, s.center)||'';
+    const dlv = deliveredLog[s.id];
+    rows.push([s.timestamp,s.submitter,s.center,s.tracking,s.carrier,s.shipDate,s.serviceDate,exp,
+      dlv?'Delivered':'In Transit', dlv?dlv.by:'', dlv?(dlv.date+' '+dlv.time):'', s.photo]);
+  });
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = `Lab_Shipment_Log_${todayStr()}.csv`;
+  a.click();
+}
+
+function confirmClearDelivered() {
+  // Hide all shipments that are marked delivered in deliveredLog
+  const ids = allShipments.filter(s=>deliveredLog[s.id]).map(s=>s.id);
+  hiddenDel = [...new Set([...hiddenDel,...ids])];
+  saveLocal(); closeModal('modal-clear-delivered'); render();
+}
+
+function promptMarkDelivered(shipmentId, tracking, center) {
+  pendingDeliverId = shipmentId;
+  document.getElementById('deliver-name').value = '';
+  document.getElementById('deliver-shipment-info').textContent = tracking + '  —  ' + center;
+  openModal('modal-mark-delivered');
+  setTimeout(() => document.getElementById('deliver-name').focus(), 60);
+}
+
+function confirmMarkDelivered() {
+  const name = document.getElementById('deliver-name').value.trim();
+  if (!name) { document.getElementById('deliver-name').style.borderColor='var(--danger)'; return; }
+  document.getElementById('deliver-name').style.borderColor='';
+  const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const dateStr = new Date().toLocaleDateString([],{month:'numeric',day:'numeric'});
+  deliveredLog[pendingDeliverId] = { by: name, time: time, date: dateStr };
+  pendingDeliverId = null;
+  saveLocal();
+  closeModal('modal-mark-delivered');
+  render();
+}
+
+document.getElementById('deliver-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmMarkDelivered();
+});
+
+function setFilter(f,btn) {
+  currentFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); render();
+}
+
+function render() {
+  const container = document.getElementById('centers-container');
+  const openSet = new Set();
+  document.querySelectorAll('.center-section.open').forEach(el=>openSet.add(el.dataset.cid));
+  // Preserve collapsed region state across renders
+  const collapsedRegions = new Set();
+  document.querySelectorAll('.region-block.collapsed').forEach(el=>collapsedRegions.add(el.dataset.region));
+  container.innerHTML='';
+
+  // Delivered shipments are hidden unless the delivered filter is active
+  const visible = allShipments.filter(s => {
+    if (hiddenDel.includes(s.id)) return false;
+    const isDelivered = !!deliveredLog[s.id];
+    if (isDelivered && currentFilter !== 'delivered') return false;
+    if (!isDelivered && currentFilter === 'delivered') return false;
+    return true;
+  });
+
+  let totalTransit=0, totalOverdue=0;
+  // Count all non-delivered, non-hidden for stats
+  allShipments.filter(s=>!hiddenDel.includes(s.id)&&!deliveredLog[s.id]).forEach(s=>{
+    totalTransit++;
+    if(isOverdue(s)) totalOverdue++;
+  });
+
+  document.getElementById('stat-centers').textContent = centers.filter(c=>!archived.includes(c)).length;
+  document.getElementById('stat-transit').textContent = totalTransit;
+  document.getElementById('stat-overdue').textContent = totalOverdue;
+  document.getElementById('pill-overdue').style.display = totalOverdue>0?'':'none';
+
+  function passes(centerName) {
+    const shipments = visible.filter(s=>cid(s.center)===cid(centerName));
+    if (shipments.length === 0 && currentFilter === 'all') return true; // show empty centers on All
+    if (currentFilter==='overdue') return shipments.some(s=>isOverdue(s));
+    return shipments.length > 0;
+  }
+
+  function renderCenterCard(name, idx, target) {
+    const id = cid(name);
+    const shipments = visible.filter(s=>cid(s.center)===id);
+    if (!passes(name)) return;
+
+    const hasOverdue = shipments.some(s=>isOverdue(s));
+    const overdue    = shipments.filter(s=>isOverdue(s)).length;
+    const pending    = shipments.filter(s=>!deliveredLog[s.id]).length;
+    const delivered  = shipments.filter(s=>!!deliveredLog[s.id]).length;
+    const isOpen     = openSet.has(id);
+    const rl         = ruleLabel(name);
+
+    let badges = '';
+    if (overdue>0)           badges+=`<span class="badge badge-overdue">! ${overdue} OVERDUE</span>`;
+    else if (pending>0)      badges+=`<span class="badge badge-pending">${pending} PENDING</span>`;
+    else if (currentFilter==='delivered' && delivered>0) badges+=`<span class="badge badge-clear">DELIVERED</span>`;
+    else if (shipments.length>0) badges+=`<span class="badge badge-clear">CLEAR</span>`;
+    if (shipments.length>0)  badges+=`<span class="badge badge-count">${shipments.length}</span>`;
+
+    const tableRows = shipments.length===0
+      ? `<tr><td colspan="8" class="empty-state">No shipments logged yet.</td></tr>`
+      : shipments.map(s=>{
+          const exp = expectedDelivery(s.shipDate,s.center)||'—';
+          const od  = isOverdue(s);
+          const dlv = deliveredLog[s.id];
+          const photoCell = s.photo
+            ? `<a class="photo-link" href="${s.photo}" target="_blank">View Label</a>`
+            : '<span style="color:var(--text-dim)">—</span>';
+          const actionCell = dlv
+            ? `<span class="delivered-by">&#10003; ${dlv.by}<br><span style="color:var(--text-dim);font-size:9px">${dlv.date} ${dlv.time}</span></span>`
+            : `<button class="deliver-btn" onclick="event.stopPropagation();promptMarkDelivered('${s.id}','${s.tracking.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}')">Mark Delivered</button>`;
+          return `<tr>
+            <td><a class="tracking-num" href="${carrierLink(s.tracking,s.carrier)}" target="_blank">${s.tracking}</a></td>
+            <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted)">${s.carrier}</td>
+            <td class="date-cell">${s.shipDate}</td>
+            <td class="date-cell">${s.serviceDate||'—'}</td>
+            <td class="date-cell${od?' date-overdue':''}">${exp}</td>
+            <td><span class="status-badge ${dlv?'s-delivered':od?'s-overdue':statusClass(s.status)}">${dlv?'Delivered':od?'Overdue':s.status}</span></td>
+            <td class="submitter-cell">${s.submitter||'—'}</td>
+            <td>${actionCell}</td>
+          </tr>`;
+        }).join('');
+
+    const sec = document.createElement('div');
+    sec.className=`center-section${isOpen?' open':''}${hasOverdue?' overdue-center':''}`;
+    sec.dataset.cid=id;
+    sec.innerHTML=`
+      <div class="center-header" onclick="this.parentElement.classList.toggle('open')">
+        <div class="center-header-left">
+          <span class="center-index">${String(idx).padStart(2,'0')}</span>
+          <span class="center-name">${name}</span>
+          <span class="center-rule">${rl}</span>
+        </div>
+        <div class="center-header-right">${badges}<span class="chevron">&#9660;</span></div>
+      </div>
+      <div class="center-body">
+        <table class="shipments-table">
+          <thead><tr>
+            <th>Tracking #</th><th>Carrier</th><th>Ship Date</th>
+            <th>Date of Service</th><th>Expected Delivery</th>
+            <th>Status</th><th>Submitted By</th><th>Action</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>`;
+    target.appendChild(sec);
+  }
+
+  function renderRegion(regionLabel, regionCenters, regionKey) {
+    const active = regionCenters.filter(c=>centers.includes(c)&&!archived.includes(c));
+    if (!active.length) return;
+    const anyVisible = active.some(n=>passes(n));
+    if (!anyVisible) return;
+
+    const isCollapsed = collapsedRegions.has(regionKey);
+    const visibleCount = active.filter(n=>passes(n)).length;
+
+    const block = document.createElement('div');
+    block.className = `region-block${isCollapsed?' collapsed':''}`;
+    block.dataset.region = regionKey;
+
+    const rh = document.createElement('div');
+    rh.className = 'region-header';
+    rh.innerHTML = `
+      <span class="region-label">${regionLabel}</span>
+      <div class="region-line"></div>
+      <div class="region-meta">
+        <span class="region-count">${visibleCount} of ${active.length} centers</span>
+        <span class="region-chevron">&#9660;</span>
+      </div>`;
+    rh.addEventListener('click', () => {
+      if (collapsedRegions.has(regionKey)) collapsedRegions.delete(regionKey);
+      else collapsedRegions.add(regionKey);
+      block.classList.toggle('collapsed');
+    });
+
+    const centersDiv = document.createElement('div');
+    centersDiv.className = 'region-centers';
+
+    let idx = 0;
+    active.forEach(name => {
+      if (!passes(name)) return;
+      idx++;
+      renderCenterCard(name, idx, centersDiv);
+    });
+
+    block.appendChild(rh);
+    block.appendChild(centersDiv);
+    container.appendChild(block);
+  }
+
+  // FL first (alphabetical), then GA, then Other
+  renderRegion('Florida', FL_CENTERS, 'FL');
+  renderRegion('Georgia', GA_CENTERS, 'GA');
+
+  const knownAll = [...GA_CENTERS,...FL_CENTERS];
+  const other = centers.filter(c=>!knownAll.includes(c)&&!archived.includes(c));
+  if (other.length) renderRegion('Other', other, 'OTHER');
+
+  if (!container.querySelector('.region-block')) {
+    container.innerHTML='<div class="empty-state" style="padding:60px">No shipments match this filter.</div>';
+  }
+}
+
+loadData();
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>
