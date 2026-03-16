@@ -1,0 +1,29 @@
+name: Update Shipments
+
+on:
+  repository_dispatch:
+    types: [update-shipments]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Write shipments.json
+        run: |
+          echo '${{ toJson(github.event.client_payload.shipments) }}' > raw.json
+          node -e "
+            const fs = require('fs');
+            const raw = fs.readFileSync('raw.json', 'utf8').trim().replace(/^\"|\"$/g, '').replace(/\\\\'/g, \"'\");
+            const parsed = JSON.parse(raw);
+            fs.writeFileSync('shipments.json', JSON.stringify(parsed, null, 2));
+          "
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add shipments.json
+          git commit -m "Update shipments data"
+          git push
