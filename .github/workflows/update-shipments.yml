@@ -11,12 +11,14 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Write shipments.json
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload.shipments) }}
         run: |
-          echo '${{ toJson(github.event.client_payload.shipments) }}' > raw.json
           node -e "
+            const payload = process.env.PAYLOAD;
+            const unquoted = JSON.parse(payload);
+            const parsed = JSON.parse(unquoted);
             const fs = require('fs');
-            const raw = fs.readFileSync('raw.json', 'utf8').trim().replace(/^\"|\"$/g, '').replace(/\\\\'/g, \"'\");
-            const parsed = JSON.parse(raw);
             fs.writeFileSync('shipments.json', JSON.stringify(parsed, null, 2));
           "
 
