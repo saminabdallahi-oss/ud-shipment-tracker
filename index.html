@@ -287,7 +287,7 @@
 <div class="modal-overlay" id="modal-clear-delivered">
   <div class="modal" style="width:360px">
     <div class="modal-title">Clear Delivered Shipments</div>
-    <div class="modal-subtitle">Removes delivered entries from this view. Data remains in your Excel sheet.</div>
+    <div class="modal-subtitle">Removes delivered entries from this view. Data remains in your Google Sheet.</div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-clear-delivered')">Cancel</button>
       <button class="btn-danger" onclick="confirmClearDelivered()">Clear All Delivered</button>
@@ -467,14 +467,14 @@ function excelDateToString(val) {
 
 function parseSharePointItem(item, i) {
   // Internal column names confirmed from SharePoint List Settings URLs
-  const center = (String(item['Endo Center - FL']||'').trim() || String(item['Endo Center - GA']||'').trim());
+  const center = String(item['Endo Center']||'').trim();
   if (!center || center.toLowerCase() === 'n/a') return null;
   const shipRaw = String(item['Ship Date']||'').trim();
   const svcRaw  = String(item['Date of Service']||'').trim();
   return {
-    id:          item['Id'] ? String(item['Id']) : (i + '-' + String(item['Tracking Number']||'')),
-    timestamp:   item['Completion time']||'',
-    submitter:   String(item['Name']||'').trim(),
+    id:          item['ItemInternalId'] || (i + '-' + String(item['Tracking Number']||'')),
+    timestamp:   item['Timestamp']||'',
+    submitter:   String(item['Submitted By']||'').trim(),
     center,
     tracking:    String(item['Tracking Number']||'').trim(),
     carrier:     String(item['Carrier']||'').trim(),
@@ -489,7 +489,7 @@ function loadData() {
   const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
   fetch(DATA_URL, {
-    credentials: "include",
+
     method: 'GET',
     
     
@@ -716,7 +716,7 @@ function removeCenterEmail(center, i) {
 function saveNotifications() {
   notifSettings.replyTo = document.getElementById('reply-to-email').value.trim();
   saveLocal();
-  // Notification settings saved locally — alerts handled via Power Automate
+  // Push notification settings to Google Sheet via Apps Script
   pushNotifSettings();
   closeModal('modal-notifications');
 }
@@ -839,7 +839,7 @@ function render() {
     if (shipments.length>0)  badges+=`<span class="badge badge-count">${shipments.length}</span>`;
 
     const tableRows = shipments.length===0
-      ? `<tr><td colspan="8" class="empty-state">No shipments logged yet.</td></tr>`
+      ? `<tr><td colspan="9" class="empty-state">No shipments logged yet.</td></tr>`
       : shipments.map(s=>{
           const exp = expectedDelivery(s.shipDate,s.center)||'—';
           const od  = isOverdue(s);
