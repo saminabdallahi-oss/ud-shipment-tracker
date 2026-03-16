@@ -467,14 +467,14 @@ function excelDateToString(val) {
 
 function parseSharePointItem(item, i) {
   // Internal column names confirmed from SharePoint List Settings URLs
-  const center = String(item['Endo Center']||'').trim();
+  const center = String(item['Endo Center']||item['Endo Center - FL']||item['Endo Center - GA']||'').trim();
   if (!center || center.toLowerCase() === 'n/a') return null;
   const shipRaw = String(item['Ship Date']||'').trim();
   const svcRaw  = String(item['Date of Service']||'').trim();
   return {
     id:          item['ItemInternalId'] || (i + '-' + String(item['Tracking Number']||'')),
     timestamp:   item['Timestamp']||'',
-    submitter:   String(item['Submitted By']||'').trim(),
+    submitter:   String(item['Submitted By']||item['Name']||'').trim(),
     center,
     tracking:    String(item['Tracking Number']||'').trim(),
     carrier:     String(item['Carrier']||'').trim(),
@@ -504,7 +504,7 @@ function loadData() {
     allShipments = [];
     const items = Array.isArray(data) ? data : (data.value || []);
     items.forEach((item, i) => {
-      if (!String(item['TrackingNumber']||'').trim()) return;
+      if (!String(item['Tracking Number']||item['TrackingNumber']||'').trim()) return;
       const s = parseSharePointItem(item, i);
       if (!s) return;
       if (s.center && !centers.includes(s.center)) {
