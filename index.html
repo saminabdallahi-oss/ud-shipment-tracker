@@ -412,8 +412,29 @@ function saveLocal() {
 const todayStr = () => new Date().toISOString().split('T')[0];
 function cid(n) { return (n||'').toLowerCase().replace(/[^a-z0-9]/g,'-'); }
 
+// Normalize any date format to YYYY-MM-DD for reliable comparison
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // M/D/YYYY or MM/DD/YYYY
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    const m = parts[0].padStart(2,'0');
+    const d = parts[1].padStart(2,'0');
+    const y = parts[2];
+    return `${y}-${m}-${d}`;
+  }
+  // Try native parse as fallback
+  const d = new Date(dateStr);
+  if (!isNaN(d)) return d.toISOString().split('T')[0];
+  return null;
+}
+
 function addBusinessDays(dateStr, days) {
-  const d = new Date(dateStr + 'T12:00:00');
+  const normalized = normalizeDate(dateStr);
+  if (!normalized) return null;
+  const d = new Date(normalized + 'T12:00:00');
   if (isNaN(d)) return null;
   let added = 0;
   while (added < days) {
@@ -426,10 +447,12 @@ function addBusinessDays(dateStr, days) {
 
 function expectedDelivery(shipDate, centerName) {
   if (!shipDate) return null;
+  const normalized = normalizeDate(shipDate);
+  if (!normalized) return null;
   const rule = deliveryRules[centerName] || { days: 0, type: 'same-day' };
-  if (!rule.days || rule.type === 'same-day') return shipDate;
-  if (rule.type === 'business') return addBusinessDays(shipDate, rule.days);
-  const d = new Date(shipDate + 'T12:00:00');
+  if (!rule.days || rule.type === 'same-day') return normalized;
+  if (rule.type === 'business') return addBusinessDays(normalized, rule.days);
+  const d = new Date(normalized + 'T12:00:00');
   if (isNaN(d)) return null;
   d.setDate(d.getDate() + rule.days);
   return d.toISOString().split('T')[0];
@@ -437,6 +460,7 @@ function expectedDelivery(shipDate, centerName) {
 
 function isOverdue(s) {
   if (s.status === 'Delivered') return false;
+  if (deliveredLog[s.id]) return false;
   const exp = expectedDelivery(s.shipDate, s.center);
   return exp ? exp < todayStr() : false;
 }
