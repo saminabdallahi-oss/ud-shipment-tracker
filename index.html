@@ -462,7 +462,14 @@ function isOverdue(s) {
   if (s.status === 'Delivered') return false;
   if (deliveredLog[s.id]) return false;
   const exp = expectedDelivery(s.shipDate, s.center);
-  return exp ? exp < todayStr() : false;
+  if (!exp) return false;
+  const today = todayStr();
+  if (exp < today) return true;
+  if (exp === today) {
+    const hour = new Date().getHours();
+    return hour >= 16;
+  }
+  return false;
 }
 
 function ruleLabel(name) {
