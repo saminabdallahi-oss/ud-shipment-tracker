@@ -79,8 +79,8 @@
     "Label Photo": "https://uniteddigestive.sharepoint.com/sites/PathologyTeam/Shared%20Documents/Apps/Microsoft%20Forms/Shipment%20Entry%20Form/Label%20Photo/Screenshot%202026-03-11%20124419_Samin%20Abdallahi%201.png",
     "Column1": "",
     "Expected Delivery": "3/17/2026",
-    "Overdue": "YES",
-    "Delivered By": "",
+    "Overdue": "NO",
+    "Delivered By": "Test Delivery — 3/19 08:06 AM",
     "__PowerAppsId__": "8e97ab57-464c-4b3c-ba3d-d094fdf70e60"
   },
   {
