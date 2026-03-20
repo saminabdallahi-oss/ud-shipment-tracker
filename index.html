@@ -585,7 +585,18 @@ function loadData() {
   });
 }
 
-function toggleGear() { document.getElementById('gear-menu').classList.toggle('open'); }
+let gearUnlocked = false;
+function toggleGear() {
+  if (gearUnlocked) {
+    document.getElementById('gear-menu').classList.toggle('open');
+    return;
+  }
+  const pw = prompt('Enter settings password:');
+  if (pw === 'UDpath') {
+    gearUnlocked = true;
+    document.getElementById('gear-menu').classList.add('open');
+  }
+}
 function gearAction(a) {
   document.getElementById('gear-menu').classList.remove('open');
   if      (a==='add-center')      { openModal('modal-add-center'); setTimeout(()=>document.getElementById('new-center-name').focus(),60); }
