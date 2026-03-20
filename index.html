@@ -860,6 +860,7 @@ function confirmMarkDelivered() {
   document.getElementById('deliver-name').style.borderColor='';
   const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   const dateStr = new Date().toLocaleDateString([],{month:'numeric',day:'numeric'});
+  const confirmedTime = dateStr + ' ' + time;
   deliveredLog[pendingDeliverId] = { by: name, time: time, date: dateStr };
   const s = allShipments.find(x => x.id === pendingDeliverId);
   pendingDeliverId = null;
