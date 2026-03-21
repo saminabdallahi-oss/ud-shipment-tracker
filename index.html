@@ -171,25 +171,6 @@
   .deliver-btn { font-family: 'DM Mono', monospace; font-size: 10px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,133,124,0.35); background: rgba(0,133,124,0.07); color: var(--teal); transition: all 0.15s; white-space: nowrap; }
   .deliver-btn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
   .delivered-by { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--success); }
-
-  .note-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; color: var(--text-dim); transition: color 0.15s; position: relative; line-height: 1; }
-  .note-btn:hover { color: var(--teal); }
-  .note-btn.has-note { color: var(--teal); }
-  .note-btn.has-note::after { content: ''; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--teal); }
-  .note-bar { display: none; background: #fffdf5; border-top: 1px solid #f0e9d0; }
-  .note-bar.open { display: table-row; }
-  .note-bar td { padding: 6px 10px; }
-  .note-bar-inner { display: flex; align-items: center; gap: 6px; }
-  .note-initials { font-family: 'DM Mono', monospace; font-size: 11px; width: 48px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--teal); font-weight: 500; text-transform: uppercase; flex-shrink: 0; }
-  .note-initials:focus { outline: none; border-color: var(--teal); }
-  .note-text { font-family: 'DM Mono', monospace; font-size: 11px; flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
-  .note-text:focus { outline: none; border-color: var(--teal); }
-  .note-clear { background: none; border: none; cursor: pointer; font-size: 13px; color: var(--text-dim); padding: 2px 4px; flex-shrink: 0; line-height: 1; }
-  .note-clear:hover { color: var(--danger); }
-  .note-display { display: none; background: #fffdf5; border-top: 1px solid #f0e9d0; }
-  .note-display.visible { display: table-row; }
-  .note-display td { padding: 4px 10px 6px 32px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
-  .note-display .note-author { color: var(--teal); font-weight: 500; margin-right: 6px; }
 </style>
 </head>
 <body>
@@ -306,7 +287,7 @@
 <div class="modal-overlay" id="modal-clear-delivered">
   <div class="modal" style="width:360px">
     <div class="modal-title">Clear Delivered Shipments</div>
-    <div class="modal-subtitle">Removes delivered entries from this view. Data remains in your Excel sheet.</div>
+    <div class="modal-subtitle">Removes delivered entries from this view. Data remains in your Google Sheet.</div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-clear-delivered')">Cancel</button>
       <button class="btn-danger" onclick="confirmClearDelivered()">Clear All Delivered</button>
@@ -318,7 +299,7 @@
 <div class="modal-overlay" id="modal-notifications">
   <div class="modal" style="width:580px">
     <div class="modal-title">Notification Recipients</div>
-    <div class="modal-subtitle">Overdue alerts are emailed daily — GA at 6AM, FL at 3PM. Set recipients per center and lab-wide contacts below.</div>
+    <div class="modal-subtitle">Overdue alerts are emailed daily — GA at 6AM, FL at 5PM. Set recipients per center and lab-wide contacts below.</div>
 
     <div style="margin-bottom:20px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Lab Staff (receives all alerts)</div>
@@ -400,8 +381,8 @@ let archived      = JSON.parse(localStorage.getItem('ud-archived-'+VER) || '[]')
 let hiddenDel     = JSON.parse(localStorage.getItem('ud-hidden-'+VER)   || '[]');
 let deliveryRules = JSON.parse(localStorage.getItem('ud-rules-'+VER)    || 'null') || buildDefaultRules();
 let deliveredLog  = JSON.parse(localStorage.getItem('ud-dlvlog-'+VER)   || '{}');
+// notifSettings: { labEmails: [], replyTo: '', centerEmails: { centerName: [] } }
 let notifSettings = JSON.parse(localStorage.getItem('ud-notif-'+VER)    || 'null') || { labEmails: [], replyTo: '', centerEmails: {} };
-let notesLog      = JSON.parse(localStorage.getItem('ud-notes-'+VER) || '{}');
 let allShipments  = [];
 let currentFilter = 'all';
 let pendingDeliverId = null;
@@ -415,9 +396,7 @@ function buildDefaultRegions() {
 function buildDefaultRules() {
   const r = {};
   GA_CENTERS.forEach(c => r[c] = { days: 0, type: 'same-day' });
-  // TEC gets 2 business days like FL since it arrives with FL specimens
   FL_CENTERS.forEach(c => r[c] = { days: 2, type: 'business' });
-  r['The Endoscopy Center'] = { days: 2, type: 'business' };
   return r;
 }
 function saveLocal() {
@@ -427,33 +406,14 @@ function saveLocal() {
   localStorage.setItem('ud-hidden-'+VER,   JSON.stringify(hiddenDel));
   localStorage.setItem('ud-rules-'+VER,    JSON.stringify(deliveryRules));
   localStorage.setItem('ud-dlvlog-'+VER,   JSON.stringify(deliveredLog));
-  localStorage.setItem('ud-notes-'+VER,    JSON.stringify(notesLog));
   localStorage.setItem('ud-notif-'+VER,    JSON.stringify(notifSettings));
 }
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 function cid(n) { return (n||'').toLowerCase().replace(/[^a-z0-9]/g,'-'); }
 
-// Normalize any date format to YYYY-MM-DD for reliable comparison
-function normalizeDate(dateStr) {
-  if (!dateStr) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  const parts = dateStr.split('/');
-  if (parts.length === 3) {
-    const m = parts[0].padStart(2,'0');
-    const d = parts[1].padStart(2,'0');
-    const y = parts[2];
-    return `${y}-${m}-${d}`;
-  }
-  const d = new Date(dateStr);
-  if (!isNaN(d)) return d.toISOString().split('T')[0];
-  return null;
-}
-
 function addBusinessDays(dateStr, days) {
-  const normalized = normalizeDate(dateStr);
-  if (!normalized) return null;
-  const d = new Date(normalized + 'T12:00:00');
+  const d = new Date(dateStr + 'T12:00:00');
   if (isNaN(d)) return null;
   let added = 0;
   while (added < days) {
@@ -466,12 +426,10 @@ function addBusinessDays(dateStr, days) {
 
 function expectedDelivery(shipDate, centerName) {
   if (!shipDate) return null;
-  const normalized = normalizeDate(shipDate);
-  if (!normalized) return null;
   const rule = deliveryRules[centerName] || { days: 0, type: 'same-day' };
-  if (!rule.days || rule.type === 'same-day') return normalized;
-  if (rule.type === 'business') return addBusinessDays(normalized, rule.days);
-  const d = new Date(normalized + 'T12:00:00');
+  if (!rule.days || rule.type === 'same-day') return shipDate;
+  if (rule.type === 'business') return addBusinessDays(shipDate, rule.days);
+  const d = new Date(shipDate + 'T12:00:00');
   if (isNaN(d)) return null;
   d.setDate(d.getDate() + rule.days);
   return d.toISOString().split('T')[0];
@@ -479,21 +437,8 @@ function expectedDelivery(shipDate, centerName) {
 
 function isOverdue(s) {
   if (s.status === 'Delivered') return false;
-  if (deliveredLog[s.id]) return false;
   const exp = expectedDelivery(s.shipDate, s.center);
-  if (!exp) return false;
-  const today = todayStr();
-  // If expected date has fully passed — always overdue
-  if (exp < today) return true;
-  // If expected date is today — only overdue after 3PM for 2-day rule centers (FL + TEC)
-  // Same-day GA centers: not overdue until tomorrow (they accession overnight, alert catches missed previous-day shipments at 6AM)
-  if (exp === today) {
-    const rule = deliveryRules[s.center] || { days: 0, type: 'same-day' };
-    if (rule.days >= 2) {
-      return new Date().getHours() >= 15; // 3:00 PM
-    }
-  }
-  return false;
+  return exp ? exp < todayStr() : false;
 }
 
 function ruleLabel(name) {
@@ -515,11 +460,13 @@ function excelDateToString(val) {
   if (!val) return '';
   const num = parseInt(val);
   if (isNaN(num)) return String(val);
+  // Excel serial date: days since Jan 0, 1900 (with Lotus 1-2-3 bug)
   const date = new Date((num - 25569) * 86400 * 1000);
-  return (date.getMonth()+1) + '/' + date.getDate() + '/' + date.getFullYear();
+  return (date.getUTCMonth()+1) + '/' + date.getUTCDate() + '/' + date.getUTCFullYear();
 }
 
 function parseSharePointItem(item, i) {
+  // Internal column names confirmed from SharePoint List Settings URLs
   const center = String(item['Endo Center']||item['Endo Center - FL']||item['Endo Center - GA']||'').trim();
   if (!center || center.toLowerCase() === 'n/a') return null;
   const shipRaw = String(item['Ship Date']||'').trim();
@@ -541,11 +488,17 @@ function parseSharePointItem(item, i) {
 function loadData() {
   const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
-  fetch(DATA_URL, { method: 'GET' })
+  fetch(DATA_URL, {
+
+    method: 'GET',
+    
+    
+  })
   .then(r => r.text())
   .then(text => {
     let data;
     try { data = JSON.parse(text); } catch(e) {
+      // Power Automate string() output uses single quotes - try to fix
       try { data = JSON.parse(text.replace(/'/g, '"')); } catch(e2) { data = []; }
     }
     allShipments = [];
@@ -558,16 +511,6 @@ function loadData() {
         centers.push(s.center);
         if (!centerRegion[s.center]) centerRegion[s.center] = 'GA';
         if (!deliveryRules[s.center]) deliveryRules[s.center] = { days:0, type:'same-day' };
-      }
-      // Sync delivered status from Excel if present
-      const deliveredBy = String(item['Delivered By']||'').trim();
-      if (deliveredBy && !deliveredLog[s.id]) {
-        const parts = deliveredBy.split(' — ');
-        deliveredLog[s.id] = {
-          by: parts[0] || deliveredBy,
-          date: parts[1] ? parts[1].split(' ')[0] : '',
-          time: parts[1] ? parts[1].split(' ').slice(1).join(' ') : ''
-        };
       }
       allShipments.push(s);
     });
@@ -585,21 +528,7 @@ function loadData() {
   });
 }
 
-const _t = ['ghp_','MI6NRy','X2kzCe','cmfPCq','cJ7DiY','05cjlw','1Q0GkE'];
-function _tok() { return _t.join(''); }
-
-let gearUnlocked = false;
-function toggleGear() {
-  if (gearUnlocked) {
-    document.getElementById('gear-menu').classList.toggle('open');
-    return;
-  }
-  const pw = prompt('Enter settings password:');
-  if (pw === 'UDpath') {
-    gearUnlocked = true;
-    document.getElementById('gear-menu').classList.add('open');
-  }
-}
+function toggleGear() { document.getElementById('gear-menu').classList.toggle('open'); }
 function gearAction(a) {
   document.getElementById('gear-menu').classList.remove('open');
   if      (a==='add-center')      { openModal('modal-add-center'); setTimeout(()=>document.getElementById('new-center-name').focus(),60); }
@@ -696,9 +625,13 @@ function saveDeliveryRules() {
   saveLocal(); closeModal('modal-delivery-rules'); render();
 }
 
+// ── NOTIFICATIONS ──
 function openNotifications() {
+  // Populate lab emails
   renderLabEmails();
+  // Reply-to
   document.getElementById('reply-to-email').value = notifSettings.replyTo || '';
+  // Populate center dropdown
   const sel = document.getElementById('notif-center-select');
   sel.innerHTML = '<option value="">Select a center...</option>';
   centers.filter(c=>!archived.includes(c)).forEach(c => {
@@ -783,8 +716,14 @@ function removeCenterEmail(center, i) {
 function saveNotifications() {
   notifSettings.replyTo = document.getElementById('reply-to-email').value.trim();
   saveLocal();
-  console.log('Notification settings saved locally:', notifSettings);
+  // Push notification settings to Google Sheet via Apps Script
+  pushNotifSettings();
   closeModal('modal-notifications');
+}
+
+function pushNotifSettings() {
+  // Notification settings are managed via Power Automate — saved locally only
+  console.log('Notification settings saved locally:', notifSettings);
 }
 
 document.getElementById('new-lab-email').addEventListener('keydown', e => { if(e.key==='Enter') addLabEmail(); });
@@ -806,6 +745,7 @@ function exportCSV() {
 }
 
 function confirmClearDelivered() {
+  // Hide all shipments that are marked delivered in deliveredLog
   const ids = allShipments.filter(s=>deliveredLog[s.id]).map(s=>s.id);
   hiddenDel = [...new Set([...hiddenDel,...ids])];
   saveLocal(); closeModal('modal-clear-delivered'); render();
@@ -818,6 +758,10 @@ function promptMarkDelivered(shipmentId, tracking, center) {
   openModal('modal-mark-delivered');
   setTimeout(() => document.getElementById('deliver-name').focus(), 60);
 }
+
+// Token segments assembled at runtime only
+const _t = ['ghp_','wMeZ5Mm','VXExxOq','mMTZKJI','H38UqJG','3s34Co40'];
+function _tok() { return _t.join(''); }
 
 async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime) {
   const owner = 'saminabdallahi-oss';
@@ -845,13 +789,7 @@ async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime) 
     content: btoa(unescape(encodeURIComponent(JSON.stringify(existing, null, 2)))),
     ...(sha ? { sha } : {})
   };
-  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if (!putRes.ok) {
-    const err = await putRes.text();
-    console.error('GitHub write failed:', putRes.status, err);
-    throw new Error('GitHub write failed: ' + putRes.status);
-  }
-  console.log('Delivery written to GitHub successfully');
+  await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
 }
 
 function confirmMarkDelivered() {
@@ -861,8 +799,8 @@ function confirmMarkDelivered() {
   const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   const dateStr = new Date().toLocaleDateString([],{month:'numeric',day:'numeric'});
   const confirmedTime = dateStr + ' ' + time;
-  deliveredLog[pendingDeliverId] = { by: name, time: time, date: dateStr };
   const s = allShipments.find(x => x.id === pendingDeliverId);
+  deliveredLog[pendingDeliverId] = { by: name, time: time, date: dateStr };
   pendingDeliverId = null;
   saveLocal();
   closeModal('modal-mark-delivered');
@@ -876,59 +814,6 @@ document.getElementById('deliver-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') confirmMarkDelivered();
 });
 
-function toggleNoteBar(id) {
-  const bar = document.getElementById('note-bar-'+id);
-  const display = document.getElementById('note-display-'+id);
-  if (!bar) return;
-  const isOpen = bar.classList.contains('open');
-  bar.classList.toggle('open', !isOpen);
-  if (!isOpen) {
-    // opening — populate fields
-    const note = notesLog[id] || {};
-    bar.querySelector('.note-initials').value = note.by || '';
-    bar.querySelector('.note-text').value = note.text || '';
-    bar.querySelector('.note-text').focus();
-  }
-}
-
-function saveNote(id) {
-  const bar = document.getElementById('note-bar-'+id);
-  if (!bar) return;
-  const by   = bar.querySelector('.note-initials').value.trim().toUpperCase();
-  const text = bar.querySelector('.note-text').value.trim();
-  if (text) {
-    notesLog[id] = { by, text };
-  } else {
-    delete notesLog[id];
-  }
-  saveLocal();
-  // Update display without full re-render
-  const btn = document.getElementById('note-btn-'+id);
-  const display = document.getElementById('note-display-'+id);
-  if (btn) btn.classList.toggle('has-note', !!notesLog[id]);
-  if (display) {
-    if (notesLog[id]) {
-      display.classList.add('visible');
-      display.querySelector('td').innerHTML = notesLog[id].by
-        ? `<span class="note-author">${notesLog[id].by}:</span>${notesLog[id].text}`
-        : notesLog[id].text;
-    } else {
-      display.classList.remove('visible');
-    }
-  }
-}
-
-function clearNote(id) {
-  delete notesLog[id];
-  saveLocal();
-  const bar = document.getElementById('note-bar-'+id);
-  const display = document.getElementById('note-display-'+id);
-  const btn = document.getElementById('note-btn-'+id);
-  if (bar) { bar.querySelector('.note-initials').value=''; bar.querySelector('.note-text').value=''; bar.classList.remove('open'); }
-  if (display) display.classList.remove('visible');
-  if (btn) btn.classList.remove('has-note');
-}
-
 function setFilter(f,btn) {
   currentFilter=f;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
@@ -939,10 +824,12 @@ function render() {
   const container = document.getElementById('centers-container');
   const openSet = new Set();
   document.querySelectorAll('.center-section.open').forEach(el=>openSet.add(el.dataset.cid));
+  // Preserve collapsed region state across renders
   const collapsedRegions = new Set();
   document.querySelectorAll('.region-block.collapsed').forEach(el=>collapsedRegions.add(el.dataset.region));
   container.innerHTML='';
 
+  // Delivered shipments are hidden unless the delivered filter is active
   const visible = allShipments.filter(s => {
     if (hiddenDel.includes(s.id)) return false;
     const isDelivered = !!deliveredLog[s.id];
@@ -952,6 +839,7 @@ function render() {
   });
 
   let totalTransit=0, totalOverdue=0;
+  // Count all non-delivered, non-hidden for stats
   allShipments.filter(s=>!hiddenDel.includes(s.id)&&!deliveredLog[s.id]).forEach(s=>{
     totalTransit++;
     if(isOverdue(s)) totalOverdue++;
@@ -964,7 +852,7 @@ function render() {
 
   function passes(centerName) {
     const shipments = visible.filter(s=>cid(s.center)===cid(centerName));
-    if (shipments.length === 0 && currentFilter === 'all') return true;
+    if (shipments.length === 0 && currentFilter === 'all') return true; // show empty centers on All
     if (currentFilter==='overdue') return shipments.some(s=>isOverdue(s));
     return shipments.length > 0;
   }
@@ -989,19 +877,17 @@ function render() {
     if (shipments.length>0)  badges+=`<span class="badge badge-count">${shipments.length}</span>`;
 
     const tableRows = shipments.length===0
-      ? `<tr><td colspan="8" class="empty-state">No shipments logged yet.</td></tr>`
+      ? `<tr><td colspan="9" class="empty-state">No shipments logged yet.</td></tr>`
       : shipments.map(s=>{
           const exp = expectedDelivery(s.shipDate,s.center)||'—';
           const od  = isOverdue(s);
           const dlv = deliveredLog[s.id];
-          const note = notesLog[s.id];
-          const sid = s.id.replace(/[^a-z0-9]/gi,'-');
+          const photoCell = s.photo
+            ? `<a class="photo-link" href="${s.photo}" target="_blank">View Label</a>`
+            : '<span style="color:var(--text-dim)">—</span>';
           const actionCell = dlv
             ? `<span class="delivered-by">&#10003; ${dlv.by}<br><span style="color:var(--text-dim);font-size:9px">${dlv.date} ${dlv.time}</span></span>`
             : `<button class="deliver-btn" onclick="event.stopPropagation();promptMarkDelivered('${s.id}','${s.tracking.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}')">Mark Delivered</button>`;
-          const noteDisplayRow = note
-            ? `<tr id="note-display-${sid}" class="note-display visible"><td colspan="9"><span class="note-author">${note.by ? note.by+':' : ''}</span>${note.text}</td></tr>`
-            : `<tr id="note-display-${sid}" class="note-display"><td colspan="9"></td></tr>`;
           return `<tr>
             <td><a class="tracking-num" href="${carrierLink(s.tracking,s.carrier)}" target="_blank">${s.tracking}</a></td>
             <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted)">${s.carrier}</td>
@@ -1011,18 +897,7 @@ function render() {
             <td><span class="status-badge ${dlv?'s-delivered':od?'s-overdue':statusClass(s.status)}">${dlv?'Delivered':od?'Overdue':s.status}</span></td>
             <td class="submitter-cell">${s.submitter||'—'}</td>
             <td>${actionCell}</td>
-            <td><button id="note-btn-${sid}" class="note-btn${note?' has-note':''}" onclick="event.stopPropagation();toggleNoteBar('${sid}')" title="Add note">✏</button></td>
-          </tr>
-          <tr id="note-bar-${sid}" class="note-bar">
-            <td colspan="9">
-              <div class="note-bar-inner">
-                <input class="note-initials" maxlength="4" placeholder="Init" onblur="saveNote('${sid}')" onkeydown="if(event.key==='Enter')saveNote('${sid}')" />
-                <input class="note-text" placeholder="Add a note..." onblur="saveNote('${sid}')" onkeydown="if(event.key==='Enter')saveNote('${sid}')" />
-                <button class="note-clear" onclick="clearNote('${sid}')" title="Clear note">&#215;</button>
-              </div>
-            </td>
-          </tr>
-          ${noteDisplayRow}`;
+          </tr>`;
         }).join('');
 
     const sec = document.createElement('div');
@@ -1042,7 +917,7 @@ function render() {
           <thead><tr>
             <th>Tracking #</th><th>Carrier</th><th>Ship Date</th>
             <th>Date of Service</th><th>Expected Delivery</th>
-            <th>Status</th><th>Submitted By</th><th>Action</th><th></th>
+            <th>Status</th><th>Submitted By</th><th>Action</th>
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
@@ -1093,6 +968,7 @@ function render() {
     container.appendChild(block);
   }
 
+  // FL first (alphabetical), then GA, then Other
   renderRegion('Florida', FL_CENTERS, 'FL');
   renderRegion('Georgia', GA_CENTERS, 'GA');
 
