@@ -1083,7 +1083,7 @@ function render() {
     if (shipments.length>0)  badges+=`<span class="badge badge-count">${shipments.length}</span>`;
 
     const tableRows = shipments.length===0
-      ? `<tr><td colspan="9" class="empty-state">No shipments logged yet.</td></tr>`
+      ? `<tr><td colspan="10" class="empty-state">No shipments logged yet.</td></tr>`
       : shipments.map(s=>{
           const exp = expectedDelivery(s.shipDate,s.center)||'—';
           const od  = isOverdue(s);
@@ -1094,8 +1094,8 @@ function render() {
             ? `<span class="delivered-by">&#10003; ${dlv.by}<br><span style="color:var(--text-dim);font-size:9px">${dlv.date} ${dlv.time}</span></span>`
             : `<button class="deliver-btn" onclick="event.stopPropagation();promptMarkDelivered('${s.id}','${s.tracking.replace(/'/g,"\\'")}','${safeName}')">Mark Delivered</button>`;
           const noteDisplayRow = note
-            ? `<tr id="note-display-${sid}" class="note-display visible"><td colspan="9"><span class="note-author">${note.by ? note.by+':' : ''}</span>${note.text}</td></tr>`
-            : `<tr id="note-display-${sid}" class="note-display"><td colspan="9"></td></tr>`;
+            ? `<tr id="note-display-${sid}" class="note-display visible"><td colspan="10"><span class="note-author">${note.by ? note.by+':' : ''}</span>${note.text}</td></tr>`
+            : `<tr id="note-display-${sid}" class="note-display"><td colspan="10"></td></tr>`;
           return `<tr>
             <td><a class="tracking-num" href="${carrierLink(s.tracking,s.carrier)}" target="_blank">${s.tracking}</a></td>
             <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted)">${s.carrier}</td>
@@ -1104,11 +1104,12 @@ function render() {
             <td class="date-cell${od?' date-overdue':''}">${exp}</td>
             <td><span class="status-badge ${dlv?'s-delivered':od?'s-overdue':statusClass(s.status)}">${dlv?'Delivered':od?'Overdue':s.status}</span></td>
             <td class="submitter-cell">${s.submitter||'—'}</td>
+            <td>${s.photo?`<a class="photo-link" href="${s.photo}" target="_blank">View Label</a>`:'<span style="color:var(--text-dim)">—</span>'}</td>
             <td>${actionCell}</td>
             <td><button id="note-btn-${sid}" class="note-btn${note?' has-note':''}" onclick="event.stopPropagation();toggleNoteBar('${sid}')" title="Add note">✏</button></td>
           </tr>
           <tr id="note-bar-${sid}" class="note-bar">
-            <td colspan="9">
+            <td colspan="10">
               <div class="note-bar-inner">
                 <input class="note-initials" maxlength="4" placeholder="Init" onblur="saveNote('${sid}')" onkeydown="if(event.key==='Enter')saveNote('${sid}')" />
                 <input class="note-text" placeholder="Add a note..." onblur="saveNote('${sid}')" onkeydown="if(event.key==='Enter')saveNote('${sid}')" />
@@ -1187,7 +1188,7 @@ function render() {
           <thead><tr>
             <th>Tracking #</th><th>Carrier</th><th>Ship Date</th>
             <th>Date of Service</th><th>Expected Delivery</th>
-            <th>Status</th><th>Submitted By</th><th>Action</th><th></th>
+            <th>Status</th><th>Submitted By</th><th>Photo</th><th>Action</th><th></th>
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
