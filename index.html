@@ -208,6 +208,24 @@
   .scard-deliver-btn { font-family: 'DM Mono', monospace; font-size: 9.5px; padding: 5px 12px; border-radius: 5px; border: 1px solid rgba(0,133,124,0.4); background: rgba(0,133,124,0.07); color: var(--teal); cursor: pointer; font-weight: 500; transition: all 0.15s; }
   .scard-deliver-btn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
   .scard-delivered { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--success); }
+  .scard-meta { display: flex; align-items: center; gap: 10px; padding-top: 7px; border-top: 1px solid var(--border); margin-top: 2px; }
+  .scard-photo-link { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--teal); text-decoration: none; }
+  .scard-photo-link:hover { text-decoration: underline; }
+  .scard-note-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--text-dim); padding: 1px 3px; position: relative; line-height: 1; transition: color 0.15s; margin-left: auto; }
+  .scard-note-btn:hover { color: var(--teal); }
+  .scard-note-btn.has-note { color: var(--teal); }
+  .scard-note-btn.has-note::after { content: ''; position: absolute; top: 0; right: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--teal); }
+  .scard-note-expand { display: none; padding-top: 7px; }
+  .scard-note-expand.open { display: block; }
+  .scard-note-display { font-family: 'DM Mono', monospace; font-size: 9.5px; color: var(--text-muted); background: #fffdf5; border: 1px solid #f0e9d0; border-radius: 4px; padding: 5px 8px; margin-bottom: 5px; }
+  .scard-note-display .note-author { color: var(--teal); font-weight: 500; margin-right: 4px; }
+  .scard-note-inputs { display: flex; gap: 5px; align-items: center; }
+  .scard-note-init { font-family: 'DM Mono', monospace; font-size: 10px; width: 44px; padding: 4px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--teal); font-weight: 500; text-transform: uppercase; flex-shrink: 0; outline: none; }
+  .scard-note-init:focus { border-color: var(--teal); }
+  .scard-note-txt { font-family: 'DM Mono', monospace; font-size: 10px; flex: 1; padding: 4px 7px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); outline: none; }
+  .scard-note-txt:focus { border-color: var(--teal); }
+  .scard-note-clr { background: none; border: none; cursor: pointer; font-size: 13px; color: var(--text-dim); padding: 2px 3px; line-height: 1; flex-shrink: 0; }
+  .scard-note-clr:hover { color: var(--danger); }
 
   @media (max-width: 640px) {
     header { padding: 0 12px; height: 52px; }
@@ -944,6 +962,66 @@ function clearNote(id) {
   if (btn) btn.classList.remove('has-note');
 }
 
+function toggleScardNote(sid) {
+  const exp = document.getElementById('scard-note-expand-'+sid);
+  if (!exp) return;
+  exp.classList.toggle('open');
+  if (exp.classList.contains('open')) {
+    exp.querySelector('.scard-note-txt').focus();
+  }
+}
+
+function saveScardNote(sid) {
+  const exp = document.getElementById('scard-note-expand-'+sid);
+  if (!exp) return;
+  const by   = exp.querySelector('.scard-note-init').value.trim().toUpperCase();
+  const text = exp.querySelector('.scard-note-txt').value.trim();
+  // Find original shipment id from sid (reverse the sanitization isn't reliable, use data attribute)
+  // We store by sid in notesLog for mobile — same key as desktop since sid is derived from s.id
+  // Actually desktop uses sid too, so they share the same key — find matching key
+  const matchKey = Object.keys(notesLog).find(k=>k.replace(/[^a-z0-9]/gi,'-')===sid) ||
+                   allShipments.find(s=>s.id.replace(/[^a-z0-9]/gi,'-')===sid)?.id || sid;
+  if (text) {
+    notesLog[matchKey] = { by, text };
+  } else {
+    delete notesLog[matchKey];
+  }
+  saveLocal();
+  const btn = document.getElementById('scard-note-btn-'+sid);
+  if (btn) btn.classList.toggle('has-note', !!notesLog[matchKey]);
+  // Update display
+  const display = exp.querySelector('.scard-note-display') || (() => {
+    const d = document.createElement('div');
+    d.className = 'scard-note-display';
+    exp.insertBefore(d, exp.querySelector('.scard-note-inputs'));
+    return d;
+  })();
+  if (notesLog[matchKey]) {
+    display.style.display = 'block';
+    display.innerHTML = notesLog[matchKey].by
+      ? `<span class="note-author">${notesLog[matchKey].by}:</span>${notesLog[matchKey].text}`
+      : notesLog[matchKey].text;
+  } else {
+    display.style.display = 'none';
+  }
+}
+
+function clearScardNote(sid) {
+  const exp = document.getElementById('scard-note-expand-'+sid);
+  const btn = document.getElementById('scard-note-btn-'+sid);
+  const matchKey = allShipments.find(s=>s.id.replace(/[^a-z0-9]/gi,'-')===sid)?.id || sid;
+  delete notesLog[matchKey];
+  saveLocal();
+  if (exp) {
+    exp.querySelector('.scard-note-init').value = '';
+    exp.querySelector('.scard-note-txt').value = '';
+    const display = exp.querySelector('.scard-note-display');
+    if (display) display.style.display = 'none';
+    exp.classList.remove('open');
+  }
+  if (btn) btn.classList.remove('has-note');
+}
+
 function setFilter(f,btn) {
   currentFilter=f;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
@@ -1048,11 +1126,16 @@ function render() {
           const exp = expectedDelivery(s.shipDate,s.center)||'—';
           const od  = isOverdue(s);
           const dlv = deliveredLog[s.id];
+          const note = notesLog[s.id];
+          const sid  = s.id.replace(/[^a-z0-9]/gi,'-');
           const statusLabel = dlv ? 'Delivered' : od ? 'Overdue' : s.status;
           const statusCls   = dlv ? 's-delivered' : od ? 's-overdue' : statusClass(s.status);
           const footerRight = dlv
             ? `<span class="scard-delivered">&#10003; ${dlv.by} <span style="color:var(--text-dim);font-size:8.5px">${dlv.date} ${dlv.time}</span></span>`
             : `<button class="scard-deliver-btn" onclick="event.stopPropagation();promptMarkDelivered('${s.id}','${s.tracking.replace(/'/g,"\\'")}','${safeName}')">Mark Delivered</button>`;
+          const noteDisplay = note
+            ? `<div class="scard-note-display"><span class="note-author">${note.by ? note.by+':' : ''}</span>${note.text}</div>`
+            : '';
           return `<div class="scard${od&&!dlv?' scard-overdue':''}">
             <div class="scard-top">
               <div>
@@ -1069,6 +1152,20 @@ function render() {
             <div class="scard-footer">
               <span class="scard-submitter">${s.submitter||'—'}</span>
               ${footerRight}
+            </div>
+            <div class="scard-meta">
+              ${s.photo?`<a class="scard-photo-link" href="${s.photo}" target="_blank">&#128247; View Label</a>`:''}
+              <button id="scard-note-btn-${sid}" class="scard-note-btn${note?' has-note':''}" onclick="event.stopPropagation();toggleScardNote('${sid}')" title="Add note">✏</button>
+            </div>
+            <div id="scard-note-expand-${sid}" class="scard-note-expand">
+              ${noteDisplay}
+              <div class="scard-note-inputs">
+                <input class="scard-note-init" maxlength="4" placeholder="Init" value="${note?note.by:''}"
+                  onblur="saveScardNote('${sid}')" onkeydown="if(event.key==='Enter')saveScardNote('${sid}')" />
+                <input class="scard-note-txt" placeholder="Add a note..." value="${note?note.text.replace(/"/g,'&quot;'):''}"
+                  onblur="saveScardNote('${sid}')" onkeydown="if(event.key==='Enter')saveScardNote('${sid}')" />
+                <button class="scard-note-clr" onclick="clearScardNote('${sid}')" title="Clear">&#215;</button>
+              </div>
             </div>
           </div>`;
         }).join('');
