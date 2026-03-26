@@ -1,0 +1,25 @@
+{
+  "name": "UD Shipment Tracker",
+  "short_name": "UD Shipment",
+  "description": "UD Path Lab specimen shipment tracking dashboard",
+  "start_url": "/ud-shipment-tracker/",
+  "scope": "/ud-shipment-tracker/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#00857c",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
