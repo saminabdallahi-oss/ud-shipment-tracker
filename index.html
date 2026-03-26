@@ -516,6 +516,7 @@ function isDupe(tracking) {
 }
 
 function loadData() {
+  const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
   fetch(DATA_URL, {
 
