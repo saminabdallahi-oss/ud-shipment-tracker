@@ -897,7 +897,7 @@ function promptMarkDelivered(shipmentId, tracking, center) {
   setTimeout(() => document.getElementById('deliver-name').focus(), 60);
 }
 
-async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime) {
+async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime, retries = 3) {
   const owner = 'saminabdallahi-oss';
   const repo  = 'ud-shipment-tracker';
   const path  = 'deliveries.json';
@@ -907,19 +907,30 @@ async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime) 
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json'
   };
-  let sha = null; let existing = {};
-  try {
-    const res = await fetch(apiUrl, { headers });
-    if (res.ok) { const data = await res.json(); sha = data.sha; existing = JSON.parse(atob(data.content.replace(/\n/g,''))); }
-  } catch(e) {}
-  existing[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
-  const body = {
-    message: `Mark delivered: ${trackingNumber}`,
-    content: btoa(unescape(encodeURIComponent(JSON.stringify(existing, null, 2)))),
-    ...(sha ? { sha } : {})
-  };
-  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if (!putRes.ok) { const err = await putRes.text(); console.error('GitHub write failed:', putRes.status, err); throw new Error('GitHub write failed: ' + putRes.status); }
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    let sha = null; let existing = {};
+    try {
+      const res = await fetch(apiUrl, { headers });
+      if (res.ok) { const data = await res.json(); sha = data.sha; existing = JSON.parse(atob(data.content.replace(/\n/g,''))); }
+    } catch(e) {}
+    existing[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
+    const body = {
+      message: `Mark delivered: ${trackingNumber}`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(existing, null, 2)))),
+      ...(sha ? { sha } : {})
+    };
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (putRes.ok) return; // success
+    if (putRes.status === 409 && attempt < retries - 1) {
+      // SHA conflict — wait briefly and retry with fresh SHA
+      await new Promise(r => setTimeout(r, 1000 + attempt * 500));
+      continue;
+    }
+    const err = await putRes.text();
+    console.error('GitHub write failed:', putRes.status, err);
+    throw new Error('GitHub write failed: ' + putRes.status);
+  }
 }
 
 function confirmMarkDelivered() {
