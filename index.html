@@ -606,16 +606,30 @@ function isDupe(tracking) {
   return dupeTracking.has((tracking||'').replace(/[\s\-]/g,'').toUpperCase());
 }
 
+const DELIVERIES_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/deliveries.json";
+
 function loadData() {
   const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
-  fetch(DATA_URL, { method: 'GET' })
-  .then(r => r.text())
-  .then(text => {
+
+  // Fetch shipments.json and deliveries.json in parallel
+  Promise.all([
+    fetch(DATA_URL, { method: 'GET' }).then(r => r.text()),
+    fetch(DELIVERIES_URL, { method: 'GET' }).then(r => r.json()).catch(() => ({}))
+  ])
+  .then(([shipmentsText, deliveriesFromGitHub]) => {
     let data;
-    try { data = JSON.parse(text); } catch(e) {
-      try { data = JSON.parse(text.replace(/'/g, '"')); } catch(e2) { data = []; }
+    try { data = JSON.parse(shipmentsText); } catch(e) {
+      try { data = JSON.parse(shipmentsText.replace(/'/g, '"')); } catch(e2) { data = []; }
     }
+
+    // Normalize deliveries.json keys: strip spaces and dashes for matching
+    const normalizeKey = k => (k||'').replace(/[\s\-]/g,'').toUpperCase();
+    const deliveriesByTracking = {};
+    Object.entries(deliveriesFromGitHub).forEach(([k, v]) => {
+      deliveriesByTracking[normalizeKey(k)] = v;
+    });
+
     allShipments = [];
     const items = Array.isArray(data) ? data : (data.value || []);
     items.forEach((item, i) => {
@@ -627,17 +641,34 @@ function loadData() {
         if (!centerRegion[s.center]) centerRegion[s.center] = 'GA';
         if (!deliveryRules[s.center]) deliveryRules[s.center] = { days:0, type:'same-day' };
       }
-      const deliveredBy = String(item['Delivered By']||'').trim();
-      if (deliveredBy && !deliveredLog[s.id]) {
-        const parts = deliveredBy.split(' — ');
+
+      // Check deliveries.json by tracking number (source of truth)
+      const normTracking = normalizeKey(s.tracking);
+      if (deliveriesByTracking[normTracking]) {
+        const d = deliveriesByTracking[normTracking];
+        // Parse timestamp e.g. "3/31 03:07 PM"
+        const parts = (d.timestamp||'').split(' ');
         deliveredLog[s.id] = {
-          by: parts[0] || deliveredBy,
-          date: parts[1] ? parts[1].split(' ')[0] : '',
-          time: parts[1] ? parts[1].split(' ').slice(1).join(' ') : ''
+          by:   d.by || '',
+          date: parts[0] || '',
+          time: parts.slice(1).join(' ') || ''
         };
+      } else {
+        // Fall back to Excel Delivered By column
+        const deliveredBy = String(item['Delivered By']||'').trim();
+        if (deliveredBy && !deliveredLog[s.id]) {
+          const parts = deliveredBy.split(' — ');
+          deliveredLog[s.id] = {
+            by:   parts[0] || deliveredBy,
+            date: parts[1] ? parts[1].split(' ')[0] : '',
+            time: parts[1] ? parts[1].split(' ').slice(1).join(' ') : ''
+          };
+        }
       }
+
       allShipments.push(s);
     });
+
     dupeTracking = buildDupeSet(allShipments);
     saveLocal();
     const lu = document.getElementById('last-updated');
