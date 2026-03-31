@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ud-shipment-tracker-v1';
+const CACHE_NAME = 'ud-shipment-tracker-v2';
 
 // Core app shell files to cache on install
 const APP_SHELL = [
