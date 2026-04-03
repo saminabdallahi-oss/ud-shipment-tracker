@@ -1088,6 +1088,7 @@ function render() {
   document.getElementById('pill-overdue').style.display = totalOverdue>0?'':'none';
 
   function passes(centerName) {
+    if (archived.includes(centerName)) return false;
     const shipments = visible.filter(s=>cid(s.center)===cid(centerName));
     if (shipments.length === 0 && currentFilter === 'all') return true;
     if (currentFilter==='overdue') return shipments.some(s=>isOverdue(s));
