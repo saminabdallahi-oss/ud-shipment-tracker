@@ -702,7 +702,9 @@ function loadData() {
 
   Promise.all([
     fetch(DATA_URL + '?t=' + Date.now(), { method: 'GET' }).then(r => r.text()),
-    fetch(DELIVERIES_URL + '?t=' + Date.now(), { method: 'GET' }).then(r => r.json()).catch(() => ({}))
+    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/deliveries.json', {
+      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
+    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ({}))
   ])
   .then(([shipmentsText, deliveriesFromGitHub]) => {
     let data;
