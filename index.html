@@ -280,7 +280,6 @@
         <div class="gear-divider"></div>
         <div class="gear-menu-section">Rules</div>
         <button class="gear-item" onclick="gearAction('delivery-rules')"><span class="gear-icon">&#8987;</span> Delivery Rules</button>
-        <button class="gear-item" onclick="gearAction('notifications')"><span class="gear-icon">&#9993;</span> Notification Recipients</button>
         <div class="gear-divider"></div>
         <div class="gear-menu-section">Data</div>
         <button class="gear-item" onclick="gearAction('export')"><span class="gear-icon">&#8659;</span> Export Log (CSV)</button>
@@ -377,44 +376,6 @@
   </div>
 </div>
 
-<!-- NOTIFICATIONS MODAL -->
-<div class="modal-overlay" id="modal-notifications">
-  <div class="modal" style="width:580px">
-    <div class="modal-title">Notification Recipients</div>
-    <div class="modal-subtitle">Overdue alerts are emailed daily — GA at 6AM, FL at 3PM. Set recipients per center and lab-wide contacts below.</div>
-    <div style="margin-bottom:20px">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Lab Staff (receives all alerts)</div>
-      <div id="lab-recipients-list" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:8px">
-        <input type="email" id="new-lab-email" placeholder="lab@example.com" style="flex:1" />
-        <button class="btn-sm" onclick="addLabEmail()">Add</button>
-      </div>
-    </div>
-    <div style="margin-bottom:12px">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Reply-To Address</div>
-      <input type="email" id="reply-to-email" placeholder="e.g. pathlab@udgi.com" />
-      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:4px">Endo centers will reply to this address when they respond to alerts.</div>
-    </div>
-    <div class="gear-divider" style="margin:16px 0"></div>
-    <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Per-Center Endo Contacts</div>
-    <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
-      <select id="notif-center-select" style="flex:1"><option value="">Select a center...</option></select>
-    </div>
-    <div id="center-notif-area" style="display:none">
-      <div id="center-email-list" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:8px">
-        <input type="email" id="new-center-email" placeholder="contact@endocenter.com" style="flex:1" />
-        <button class="btn-sm" onclick="addCenterEmail()">Add</button>
-      </div>
-    </div>
-    <div id="center-notif-placeholder" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);padding:12px 0">Select a center above to manage its contacts.</div>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal('modal-notifications')">Cancel</button>
-      <button class="btn-primary" onclick="saveNotifications()">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- MARK DELIVERED MODAL -->
 <div class="modal-overlay" id="modal-mark-delivered">
   <div class="modal" style="width:340px">
@@ -461,7 +422,6 @@ let archived      = JSON.parse(localStorage.getItem('ud-archived-'+VER) || '[]')
 let hiddenDel     = JSON.parse(localStorage.getItem('ud-hidden-'+VER)   || '[]');
 let deliveryRules = JSON.parse(localStorage.getItem('ud-rules-'+VER)    || 'null') || buildDefaultRules();
 let deliveredLog  = JSON.parse(localStorage.getItem('ud-dlvlog-'+VER)   || '{}');
-let notifSettings = JSON.parse(localStorage.getItem('ud-notif-'+VER)    || 'null') || { labEmails: [], replyTo: '', centerEmails: {} };
 let notesLog      = JSON.parse(localStorage.getItem('ud-notes-'+VER)    || '{}');
 let allShipments  = [];
 let dupeTracking  = new Set();
@@ -577,7 +537,6 @@ function saveLocal() {
   localStorage.setItem('ud-rules-'+VER,    JSON.stringify(deliveryRules));
   localStorage.setItem('ud-dlvlog-'+VER,   JSON.stringify(deliveredLog));
   localStorage.setItem('ud-notes-'+VER,    JSON.stringify(notesLog));
-  localStorage.setItem('ud-notif-'+VER,    JSON.stringify(notifSettings));
 }
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -783,7 +742,6 @@ function gearAction(a) {
   if      (a==='add-center')      { openModal('modal-add-center'); setTimeout(()=>document.getElementById('new-center-name').focus(),60); }
   else if (a==='manage-centers')  { renderManageList(); openModal('modal-manage-centers'); }
   else if (a==='delivery-rules')  { renderRulesTable(); openModal('modal-delivery-rules'); }
-  else if (a==='notifications')   { openNotifications(); }
   else if (a==='export')          { exportCSV(); }
   else if (a==='clear-delivered') { openModal('modal-clear-delivered'); }
 }
@@ -870,86 +828,6 @@ function saveDeliveryRules() {
   });
   saveLocal(); closeModal('modal-delivery-rules'); render();
 }
-
-function openNotifications() {
-  renderLabEmails();
-  document.getElementById('reply-to-email').value = notifSettings.replyTo || '';
-  const sel = document.getElementById('notif-center-select');
-  sel.innerHTML = '<option value="">Select a center...</option>';
-  centers.filter(c=>!archived.includes(c)).forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c; opt.textContent = c; sel.appendChild(opt);
-  });
-  sel.value = '';
-  document.getElementById('center-notif-area').style.display = 'none';
-  document.getElementById('center-notif-placeholder').style.display = 'block';
-  openModal('modal-notifications');
-}
-function renderLabEmails() {
-  const list = document.getElementById('lab-recipients-list');
-  list.innerHTML = '';
-  (notifSettings.labEmails||[]).forEach((email,i) => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:5px;font-family:DM Mono,monospace;font-size:11px;';
-    row.innerHTML = `<span>${email}</span><button class="sm-btn remove" onclick="removeLabEmail(${i})" style="font-size:10px;padding:2px 7px">Remove</button>`;
-    list.appendChild(row);
-  });
-  if (!notifSettings.labEmails.length) {
-    list.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-dim);padding:6px 0">No lab recipients added yet.</div>';
-  }
-}
-function addLabEmail() {
-  const val = document.getElementById('new-lab-email').value.trim();
-  if (!val || !val.includes('@')) return;
-  if (!notifSettings.labEmails.includes(val)) notifSettings.labEmails.push(val);
-  document.getElementById('new-lab-email').value = '';
-  renderLabEmails();
-}
-function removeLabEmail(i) { notifSettings.labEmails.splice(i,1); renderLabEmails(); }
-
-document.getElementById('notif-center-select').addEventListener('change', function() {
-  const center = this.value;
-  if (!center) {
-    document.getElementById('center-notif-area').style.display = 'none';
-    document.getElementById('center-notif-placeholder').style.display = 'block';
-    return;
-  }
-  document.getElementById('center-notif-area').style.display = 'block';
-  document.getElementById('center-notif-placeholder').style.display = 'none';
-  renderCenterEmails(center);
-});
-function renderCenterEmails(center) {
-  const list = document.getElementById('center-email-list');
-  list.innerHTML = '';
-  const emails = (notifSettings.centerEmails||{})[center] || [];
-  emails.forEach((email,i) => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:5px;font-family:DM Mono,monospace;font-size:11px;';
-    row.innerHTML = `<span>${email}</span><button class="sm-btn remove" onclick="removeCenterEmail('${center.replace(/'/g,"\\'")}',${i})" style="font-size:10px;padding:2px 7px">Remove</button>`;
-    list.appendChild(row);
-  });
-  if (!emails.length) {
-    list.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text-dim);padding:6px 0">No contacts added for this center yet.</div>';
-  }
-}
-function addCenterEmail() {
-  const center = document.getElementById('notif-center-select').value;
-  const val = document.getElementById('new-center-email').value.trim();
-  if (!center || !val || !val.includes('@')) return;
-  if (!notifSettings.centerEmails[center]) notifSettings.centerEmails[center] = [];
-  if (!notifSettings.centerEmails[center].includes(val)) notifSettings.centerEmails[center].push(val);
-  document.getElementById('new-center-email').value = '';
-  renderCenterEmails(center);
-}
-function removeCenterEmail(center, i) { notifSettings.centerEmails[center].splice(i,1); renderCenterEmails(center); }
-function saveNotifications() {
-  notifSettings.replyTo = document.getElementById('reply-to-email').value.trim();
-  saveLocal();
-  closeModal('modal-notifications');
-}
-
-document.getElementById('new-lab-email').addEventListener('keydown', e => { if(e.key==='Enter') addLabEmail(); });
-document.getElementById('new-center-email').addEventListener('keydown', e => { if(e.key==='Enter') addCenterEmail(); });
 
 function exportCSV() {
   const rows = [['Timestamp','Submitted By','Center','Tracking #','Carrier','Ship Date','Date of Service','Expected Delivery','Status','Confirmed By','Confirmed Time','Photo','Duplicate']];
