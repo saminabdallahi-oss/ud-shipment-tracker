@@ -399,7 +399,6 @@
 const _sa = 'SA-2026'; // build tag
 
 const DATA_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/shipments.json";
-const DELIVERIES_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/deliveries.json";
 
 const GA_CENTERS = [
   "Athens-Clarke County Endoscopy","DeKalb Gastroenterology Endoscopy",
@@ -440,6 +439,14 @@ let _hiddenFlushQueued = false;
 // ── WRITE QUEUE — ARCHIVED ──
 let _archivedFlushLock   = false;
 let _archivedFlushQueued = false;
+
+// ── WRITE QUEUE — RULES ──
+let _rulesFlushLock   = false;
+let _rulesFlushQueued = false;
+
+// ── WRITE QUEUE — CENTERS ──
+let _centersFlushLock   = false;
+let _centersFlushQueued = false;
 
 function queueDeliveryWrite(trackingNumber, confirmedBy, confirmedTime) {
   _pendingWrites[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
@@ -614,6 +621,78 @@ async function flushArchived(retries = 3) {
   }
 }
 
+function scheduleRulesFlush() {
+  if (_rulesFlushLock) { _rulesFlushQueued = true; return; }
+  _rulesFlushQueued = false;
+  _rulesFlushLock = true;
+  flushRules().finally(() => {
+    _rulesFlushLock = false;
+    if (_rulesFlushQueued) scheduleRulesFlush();
+  });
+}
+
+async function flushRules(retries = 3) {
+  const owner  = 'saminabdallahi-oss';
+  const repo   = 'ud-shipment-tracker';
+  const path   = 'rules.json';
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = {
+    'Authorization': `token ${_tok()}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    let sha = null;
+    try { const res = await fetch(apiUrl, { headers }); if (res.ok) { const d = await res.json(); sha = d.sha; } } catch(e) {}
+    const body = {
+      message: 'Update delivery rules',
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(deliveryRules)))),
+      ...(sha ? { sha } : {})
+    };
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (putRes.ok) return;
+    if (putRes.status === 409 && attempt < retries - 1) { await new Promise(r => setTimeout(r, 800 + attempt * 400)); continue; }
+    console.error('GitHub rules write failed:', putRes.status);
+    throw new Error('GitHub rules write failed: ' + putRes.status);
+  }
+}
+
+function scheduleCentersFlush() {
+  if (_centersFlushLock) { _centersFlushQueued = true; return; }
+  _centersFlushQueued = false;
+  _centersFlushLock = true;
+  flushCenters().finally(() => {
+    _centersFlushLock = false;
+    if (_centersFlushQueued) scheduleCentersFlush();
+  });
+}
+
+async function flushCenters(retries = 3) {
+  const owner  = 'saminabdallahi-oss';
+  const repo   = 'ud-shipment-tracker';
+  const path   = 'centers.json';
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = {
+    'Authorization': `token ${_tok()}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    let sha = null;
+    try { const res = await fetch(apiUrl, { headers }); if (res.ok) { const d = await res.json(); sha = d.sha; } } catch(e) {}
+    const body = {
+      message: 'Update centers',
+      content: btoa(unescape(encodeURIComponent(JSON.stringify({ centers, centerRegion })))),
+      ...(sha ? { sha } : {})
+    };
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (putRes.ok) return;
+    if (putRes.status === 409 && attempt < retries - 1) { await new Promise(r => setTimeout(r, 800 + attempt * 400)); continue; }
+    console.error('GitHub centers write failed:', putRes.status);
+    throw new Error('GitHub centers write failed: ' + putRes.status);
+  }
+}
+
 function buildDefaultRegions() {
   const r = {};
   GA_CENTERS.forEach(c => r[c] = 'GA');
@@ -767,9 +846,15 @@ function loadData() {
     }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ([])),
     fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/archived.json', {
       headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
+    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null)),
+    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/rules.json', {
+      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
+    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null)),
+    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/centers.json', {
+      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
     }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null))
   ])
-  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub, archivedFromGitHub]) => {
+  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub, archivedFromGitHub, rulesFromGitHub, centersFromGitHub]) => {
     let data;
     try { data = JSON.parse(shipmentsText); } catch(e) {
       try { data = JSON.parse(shipmentsText.replace(/'/g, '"')); } catch(e2) { data = []; }
@@ -783,6 +868,17 @@ function loadData() {
     // GitHub is source of truth for archived centers — replace local if available
     if (Array.isArray(archivedFromGitHub)) {
       archived = archivedFromGitHub;
+    }
+
+    // GitHub is source of truth for delivery rules — replace local if available
+    if (rulesFromGitHub && typeof rulesFromGitHub === 'object' && !Array.isArray(rulesFromGitHub)) {
+      deliveryRules = rulesFromGitHub;
+    }
+
+    // GitHub is source of truth for centers — replace local if available
+    if (centersFromGitHub && Array.isArray(centersFromGitHub.centers)) {
+      centers = centersFromGitHub.centers;
+      centerRegion = centersFromGitHub.centerRegion || centerRegion;
     }
 
     const normalizeKey = k => (k||'').replace(/[\s\-]/g,'').toUpperCase();
@@ -801,6 +897,7 @@ function loadData() {
         centers.push(s.center);
         if (!centerRegion[s.center]) centerRegion[s.center] = 'GA';
         if (!deliveryRules[s.center]) deliveryRules[s.center] = { days:0, type:'same-day' };
+        scheduleCentersFlush();
       }
 
       const normTracking = normalizeKey(s.tracking);
@@ -882,6 +979,7 @@ function confirmAddCenter() {
   centerRegion[name] = region;
   deliveryRules[name] = region==='FL' ? {days:2,type:'business'} : {days:0,type:'same-day'};
   saveLocal(); closeModal('modal-add-center'); render();
+  scheduleCentersFlush();
 }
 document.getElementById('new-center-name').addEventListener('keydown', e => { if(e.key==='Enter') confirmAddCenter(); });
 
@@ -941,6 +1039,7 @@ function saveDeliveryRules() {
     deliveryRules[name] = { days, type: days===0?'same-day':type };
   });
   saveLocal(); closeModal('modal-delivery-rules'); render();
+  scheduleRulesFlush();
 }
 
 function exportCSV() {
