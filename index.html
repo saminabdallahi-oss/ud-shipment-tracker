@@ -437,6 +437,10 @@ let _flushQueued   = false;
 let _hiddenFlushLock   = false;
 let _hiddenFlushQueued = false;
 
+// ── WRITE QUEUE — ARCHIVED ──
+let _archivedFlushLock   = false;
+let _archivedFlushQueued = false;
+
 function queueDeliveryWrite(trackingNumber, confirmedBy, confirmedTime) {
   _pendingWrites[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
   scheduleFlush();
@@ -561,6 +565,52 @@ async function flushHidden(retries = 3) {
     const errText = await putRes.text();
     console.error('GitHub hidden write failed:', putRes.status, errText);
     throw new Error('GitHub hidden write failed: ' + putRes.status);
+  }
+}
+
+function scheduleArchivedFlush() {
+  if (_archivedFlushLock) { _archivedFlushQueued = true; return; }
+  _archivedFlushQueued = false;
+  _archivedFlushLock = true;
+  flushArchived().finally(() => {
+    _archivedFlushLock = false;
+    if (_archivedFlushQueued) scheduleArchivedFlush();
+  });
+}
+
+async function flushArchived(retries = 3) {
+  const owner  = 'saminabdallahi-oss';
+  const repo   = 'ud-shipment-tracker';
+  const path   = 'archived.json';
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = {
+    'Authorization': `token ${_tok()}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    let sha = null;
+    try {
+      const res = await fetch(apiUrl, { headers });
+      if (res.ok) { const d = await res.json(); sha = d.sha; }
+    } catch(e) {}
+
+    const body = {
+      message: 'Update archived centers',
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(archived)))),
+      ...(sha ? { sha } : {})
+    };
+
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (putRes.ok) return;
+    if (putRes.status === 409 && attempt < retries - 1) {
+      await new Promise(r => setTimeout(r, 800 + attempt * 400));
+      continue;
+    }
+    const errText = await putRes.text();
+    console.error('GitHub archived write failed:', putRes.status, errText);
+    throw new Error('GitHub archived write failed: ' + putRes.status);
   }
 }
 
@@ -714,9 +764,12 @@ function loadData() {
     }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ({})),
     fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/hidden.json', {
       headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ([]))
+    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ([])),
+    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/archived.json', {
+      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
+    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null))
   ])
-  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub]) => {
+  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub, archivedFromGitHub]) => {
     let data;
     try { data = JSON.parse(shipmentsText); } catch(e) {
       try { data = JSON.parse(shipmentsText.replace(/'/g, '"')); } catch(e2) { data = []; }
@@ -725,6 +778,11 @@ function loadData() {
     // Merge hidden IDs from GitHub with local — union of both
     if (Array.isArray(hiddenFromGitHub) && hiddenFromGitHub.length) {
       hiddenDel = [...new Set([...hiddenDel, ...hiddenFromGitHub])];
+    }
+
+    // GitHub is source of truth for archived centers — replace local if available
+    if (Array.isArray(archivedFromGitHub)) {
+      archived = archivedFromGitHub;
     }
 
     const normalizeKey = k => (k||'').replace(/[\s\-]/g,'').toUpperCase();
@@ -847,8 +905,8 @@ function renderManageList() {
     list.appendChild(div);
   });
 }
-function archiveCenter(n) { if(!archived.includes(n)) archived.push(n); saveLocal(); renderManageList(); render(); }
-function restoreCenter(n) { archived=archived.filter(a=>a!==n); saveLocal(); renderManageList(); render(); }
+function archiveCenter(n) { if(!archived.includes(n)) archived.push(n); saveLocal(); renderManageList(); render(); scheduleArchivedFlush(); }
+function restoreCenter(n) { archived=archived.filter(a=>a!==n); saveLocal(); renderManageList(); render(); scheduleArchivedFlush(); }
 
 function renderRulesTable() {
   const tbody = document.getElementById('rules-tbody');
