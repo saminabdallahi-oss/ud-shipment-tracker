@@ -136,7 +136,6 @@
   .s-unknown     { background: rgba(122,147,171,0.1); color: var(--text-muted); border: 1px solid var(--border); }
   .empty-state { text-align: center; padding: 22px; color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 11px; }
 
-  /* ── DUPE BADGE ── */
   .badge-dupe { font-family: 'DM Mono', monospace; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; background: rgba(196,127,0,0.14); color: var(--warn); border: 1px solid rgba(196,127,0,0.35); margin-left: 5px; vertical-align: middle; white-space: nowrap; }
 
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 200; align-items: center; justify-content: center; }
@@ -200,7 +199,6 @@
   .note-display td { padding: 4px 10px 6px 32px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
   .note-display .note-author { color: var(--teal); font-weight: 500; margin-right: 6px; }
 
-  /* ── MOBILE CARDS ── */
   .mobile-cards { display: none; padding: 8px 10px 10px; flex-direction: column; gap: 6px; }
   .scard { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
   .scard.scard-overdue { border-left: 3px solid var(--danger); }
@@ -236,7 +234,6 @@
   .scard-note-clr { background: none; border: none; cursor: pointer; font-size: 13px; color: var(--text-dim); padding: 2px 3px; line-height: 1; flex-shrink: 0; }
   .scard-note-clr:hover { color: var(--danger); }
 
-  /* ── OFFLINE BANNER ── */
   .offline-banner { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #2a3a4a; color: #fff; font-family: 'DM Mono', monospace; font-size: 11px; text-align: center; padding: 10px 16px; z-index: 999; letter-spacing: 0.04em; }
   .offline-banner.visible { display: block; }
 
@@ -436,7 +433,12 @@
 </div>
 
 <script>
+// UD Shipment Tracker — © 2026 Samin Abdallahi
+
+const _sa = 'SA-2026'; // build tag
+
 const DATA_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/shipments.json";
+const DELIVERIES_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/deliveries.json";
 
 const GA_CENTERS = [
   "Athens-Clarke County Endoscopy","DeKalb Gastroenterology Endoscopy",
@@ -465,6 +467,94 @@ let allShipments  = [];
 let dupeTracking  = new Set();
 let currentFilter = 'all';
 let pendingDeliverId = null;
+
+// ── WRITE QUEUE ──
+// Accumulates deliveries to write; a single async flush handles the GitHub PUT.
+// If a flush is in progress, new items wait — next flush picks them all up.
+let _pendingWrites = {};   // { trackingNumber: { by, timestamp } }
+let _flushLock     = false;
+let _flushQueued   = false;
+
+function queueDeliveryWrite(trackingNumber, confirmedBy, confirmedTime) {
+  _pendingWrites[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
+  scheduleFlush();
+}
+
+function scheduleFlush() {
+  if (_flushLock) {
+    // A flush is running — flag that more writes are waiting
+    _flushQueued = true;
+    return;
+  }
+  _flushQueued = false;
+  _flushLock = true;
+  flushDeliveries().finally(() => {
+    _flushLock = false;
+    // If more writes arrived while we were flushing, flush again
+    if (_flushQueued && Object.keys(_pendingWrites).length > 0) {
+      scheduleFlush();
+    }
+  });
+}
+
+async function flushDeliveries(retries = 3) {
+  if (Object.keys(_pendingWrites).length === 0) return;
+
+  const owner  = 'saminabdallahi-oss';
+  const repo   = 'ud-shipment-tracker';
+  const path   = 'deliveries.json';
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = {
+    'Authorization': `token ${_tok()}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    // Snapshot the pending writes at the start of this attempt
+    const batch = { ..._pendingWrites };
+
+    let sha = null;
+    let existing = {};
+    try {
+      const res = await fetch(apiUrl + '?t=' + Date.now(), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        sha = data.sha;
+        existing = JSON.parse(atob(data.content.replace(/\n/g, '')));
+      }
+    } catch(e) {
+      console.warn('Failed to fetch deliveries.json for flush:', e);
+    }
+
+    // Merge all pending writes into existing
+    Object.assign(existing, batch);
+
+    const body = {
+      message: `Mark delivered: ${Object.keys(batch).join(', ')}`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(existing, null, 2)))),
+      ...(sha ? { sha } : {})
+    };
+
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+
+    if (putRes.ok) {
+      // Success — remove only the keys we just wrote from pending
+      Object.keys(batch).forEach(k => { delete _pendingWrites[k]; });
+      return;
+    }
+
+    if (putRes.status === 409 && attempt < retries - 1) {
+      // SHA conflict — wait and retry with a fresh GET
+      await new Promise(r => setTimeout(r, 800 + attempt * 400));
+      continue;
+    }
+
+    const errText = await putRes.text();
+    console.error('GitHub delivery write failed:', putRes.status, errText);
+    throw new Error('GitHub write failed: ' + putRes.status);
+  }
+}
 
 function buildDefaultRegions() {
   const r = {};
@@ -606,16 +696,13 @@ function isDupe(tracking) {
   return dupeTracking.has((tracking||'').replace(/[\s\-]/g,'').toUpperCase());
 }
 
-const DELIVERIES_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/deliveries.json";
-
 function loadData() {
   const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
 
-  // Fetch shipments.json and deliveries.json in parallel
   Promise.all([
-    fetch(DATA_URL, { method: 'GET' }).then(r => r.text()),
-    fetch(DELIVERIES_URL, { method: 'GET' }).then(r => r.json()).catch(() => ({}))
+    fetch(DATA_URL + '?t=' + Date.now(), { method: 'GET' }).then(r => r.text()),
+    fetch(DELIVERIES_URL + '?t=' + Date.now(), { method: 'GET' }).then(r => r.json()).catch(() => ({}))
   ])
   .then(([shipmentsText, deliveriesFromGitHub]) => {
     let data;
@@ -623,7 +710,6 @@ function loadData() {
       try { data = JSON.parse(shipmentsText.replace(/'/g, '"')); } catch(e2) { data = []; }
     }
 
-    // Normalize deliveries.json keys: strip spaces and dashes for matching
     const normalizeKey = k => (k||'').replace(/[\s\-]/g,'').toUpperCase();
     const deliveriesByTracking = {};
     Object.entries(deliveriesFromGitHub).forEach(([k, v]) => {
@@ -642,11 +728,9 @@ function loadData() {
         if (!deliveryRules[s.center]) deliveryRules[s.center] = { days:0, type:'same-day' };
       }
 
-      // Check deliveries.json by tracking number (source of truth)
       const normTracking = normalizeKey(s.tracking);
       if (deliveriesByTracking[normTracking]) {
         const d = deliveriesByTracking[normTracking];
-        // Parse timestamp e.g. "3/31 03:07 PM"
         const parts = (d.timestamp||'').split(' ');
         deliveredLog[s.id] = {
           by:   d.by || '',
@@ -654,7 +738,6 @@ function loadData() {
           time: parts.slice(1).join(' ') || ''
         };
       } else {
-        // Fall back to Excel Delivered By column
         const deliveredBy = String(item['Delivered By']||'').trim();
         if (deliveredBy && !deliveredLog[s.id]) {
           const parts = deliveredBy.split(' — ');
@@ -860,7 +943,6 @@ function removeCenterEmail(center, i) { notifSettings.centerEmails[center].splic
 function saveNotifications() {
   notifSettings.replyTo = document.getElementById('reply-to-email').value.trim();
   saveLocal();
-  console.log('Notification settings saved locally:', notifSettings);
   closeModal('modal-notifications');
 }
 
@@ -897,42 +979,6 @@ function promptMarkDelivered(shipmentId, tracking, center) {
   setTimeout(() => document.getElementById('deliver-name').focus(), 60);
 }
 
-async function pushDeliveryToGitHub(trackingNumber, confirmedBy, confirmedTime, retries = 3) {
-  const owner = 'saminabdallahi-oss';
-  const repo  = 'ud-shipment-tracker';
-  const path  = 'deliveries.json';
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-  const headers = {
-    'Authorization': `token ${_tok()}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json'
-  };
-
-  for (let attempt = 0; attempt < retries; attempt++) {
-    let sha = null; let existing = {};
-    try {
-      const res = await fetch(apiUrl, { headers });
-      if (res.ok) { const data = await res.json(); sha = data.sha; existing = JSON.parse(atob(data.content.replace(/\n/g,''))); }
-    } catch(e) {}
-    existing[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
-    const body = {
-      message: `Mark delivered: ${trackingNumber}`,
-      content: btoa(unescape(encodeURIComponent(JSON.stringify(existing, null, 2)))),
-      ...(sha ? { sha } : {})
-    };
-    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-    if (putRes.ok) return; // success
-    if (putRes.status === 409 && attempt < retries - 1) {
-      // SHA conflict — wait briefly and retry with fresh SHA
-      await new Promise(r => setTimeout(r, 1000 + attempt * 500));
-      continue;
-    }
-    const err = await putRes.text();
-    console.error('GitHub write failed:', putRes.status, err);
-    throw new Error('GitHub write failed: ' + putRes.status);
-  }
-}
-
 function confirmMarkDelivered() {
   const name = document.getElementById('deliver-name').value.trim();
   if (!name) { document.getElementById('deliver-name').style.borderColor='var(--danger)'; return; }
@@ -944,7 +990,9 @@ function confirmMarkDelivered() {
   const s = allShipments.find(x => x.id === pendingDeliverId);
   pendingDeliverId = null;
   saveLocal(); closeModal('modal-mark-delivered'); render();
-  if (s && s.tracking) pushDeliveryToGitHub(s.tracking, name, confirmedTime).catch(e => console.warn('Delivery writeback failed:', e));
+  if (s && s.tracking) {
+    queueDeliveryWrite(s.tracking, name, confirmedTime);
+  }
 }
 document.getElementById('deliver-name').addEventListener('keydown', e => { if (e.key === 'Enter') confirmMarkDelivered(); });
 
@@ -1242,6 +1290,8 @@ function updateOnlineStatus() {
 window.addEventListener('online',  updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
+
+
 </script>
 </body>
 </html>
