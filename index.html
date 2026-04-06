@@ -911,7 +911,7 @@ function loadData() {
         };
       } else {
         const deliveredBy = String(item['Delivered By']||'').trim();
-        if (deliveredBy && !deliveredLog[s.id]) {
+        if (deliveredBy) {
           const parts = deliveredBy.split(' — ');
           deliveredLog[s.id] = {
             by:   parts[0] || deliveredBy,
