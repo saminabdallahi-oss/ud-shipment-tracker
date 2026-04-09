@@ -399,6 +399,7 @@
 const _sa = 'SA-2026'; // build tag
 
 const DATA_URL = "https://raw.githubusercontent.com/saminabdallahi-oss/ud-shipment-tracker/main/shipments.json";
+const GH_BASE  = 'https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/';
 
 const GA_CENTERS = [
   "Athens-Clarke County Endoscopy","DeKalb Gastroenterology Endoscopy",
@@ -421,7 +422,7 @@ let archived      = JSON.parse(localStorage.getItem('ud-archived-'+VER) || '[]')
 let hiddenDel     = JSON.parse(localStorage.getItem('ud-hidden-'+VER)   || '[]');
 let deliveryRules = JSON.parse(localStorage.getItem('ud-rules-'+VER)    || 'null') || buildDefaultRules();
 let deliveredLog  = JSON.parse(localStorage.getItem('ud-dlvlog-'+VER)   || '{}');
-let notesLog      = JSON.parse(localStorage.getItem('ud-notes-'+VER)    || '{}');
+let notesLog      = {}; // loaded from GitHub on startup; localStorage used only for one-time migration
 let allShipments  = [];
 let dupeTracking  = new Set();
 let currentFilter = 'all';
@@ -447,6 +448,10 @@ let _rulesFlushQueued = false;
 // ── WRITE QUEUE — CENTERS ──
 let _centersFlushLock   = false;
 let _centersFlushQueued = false;
+
+// ── WRITE QUEUE — NOTES ──
+let _notesFlushLock   = false;
+let _notesFlushQueued = false;
 
 function queueDeliveryWrite(trackingNumber, confirmedBy, confirmedTime) {
   _pendingWrites[trackingNumber] = { by: confirmedBy, timestamp: confirmedTime };
@@ -693,6 +698,35 @@ async function flushCenters(retries = 3) {
   }
 }
 
+// ── NOTES — GITHUB SYNC ──
+// Notes keyed by normalized tracking number — stable and identical across all users/devices.
+function normTrack(t) { return (t||'').replace(/[\s\-]/g,'').toUpperCase(); }
+
+function scheduleNotesFlush() {
+  if (_notesFlushLock) { _notesFlushQueued = true; return; }
+  _notesFlushQueued = false; _notesFlushLock = true;
+  flushNotes().finally(() => { _notesFlushLock = false; if (_notesFlushQueued) scheduleNotesFlush(); });
+}
+async function flushNotes(retries = 3) {
+  const apiUrl = GH_BASE + 'notes.json';
+  const headers = { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    let sha = null;
+    try { const res = await fetch(apiUrl, { headers }); if (res.ok) { const d = await res.json(); sha = d.sha; } } catch(e) {}
+    const body = { message: 'Update notes', content: btoa(unescape(encodeURIComponent(JSON.stringify(notesLog, null, 2)))), ...(sha ? { sha } : {}) };
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (putRes.ok) return;
+    if (putRes.status === 409 && attempt < retries - 1) { await new Promise(r => setTimeout(r, 800 + attempt * 400)); continue; }
+    throw new Error('GitHub notes write failed: ' + putRes.status);
+  }
+}
+
+// Maps a DOM element's sid (sanitized s.id slug) back to a normalized tracking key for notesLog lookup
+function trackingKeyForSid(sid) {
+  const s = allShipments.find(x => x.id.replace(/[^a-z0-9]/gi,'-') === sid);
+  return s ? normTrack(s.tracking) : sid;
+}
+
 function buildDefaultRegions() {
   const r = {};
   GA_CENTERS.forEach(c => r[c] = 'GA');
@@ -713,7 +747,7 @@ function saveLocal() {
   localStorage.setItem('ud-hidden-'+VER,   JSON.stringify(hiddenDel));
   localStorage.setItem('ud-rules-'+VER,    JSON.stringify(deliveryRules));
   localStorage.setItem('ud-dlvlog-'+VER,   JSON.stringify(deliveredLog));
-  localStorage.setItem('ud-notes-'+VER,    JSON.stringify(notesLog));
+  // notesLog intentionally excluded — lives on GitHub only
 }
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -836,25 +870,22 @@ function loadData() {
   const btn = document.getElementById('refresh-btn');
   btn.innerHTML = 'Refreshing...';
 
+  const ghHeaders = { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' };
+  const ghFetch = path => fetch(GH_BASE + path, { headers: ghHeaders })
+    .then(r => r.json())
+    .then(d => JSON.parse(atob(d.content.replace(/\n/g,''))))
+    .catch(() => null);
+
   Promise.all([
     fetch(DATA_URL + '?t=' + Date.now(), { method: 'GET' }).then(r => r.text()),
-    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/deliveries.json', {
-      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ({})),
-    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/hidden.json', {
-      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => ([])),
-    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/archived.json', {
-      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null)),
-    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/rules.json', {
-      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null)),
-    fetch('https://api.github.com/repos/saminabdallahi-oss/ud-shipment-tracker/contents/centers.json', {
-      headers: { 'Authorization': `token ${_tok()}`, 'Accept': 'application/vnd.github.v3+json' }
-    }).then(r => r.json()).then(d => JSON.parse(atob(d.content.replace(/\n/g,'')))).catch(() => (null))
+    ghFetch('deliveries.json'),
+    ghFetch('hidden.json'),
+    ghFetch('archived.json'),
+    ghFetch('rules.json'),
+    ghFetch('centers.json'),
+    ghFetch('notes.json')
   ])
-  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub, archivedFromGitHub, rulesFromGitHub, centersFromGitHub]) => {
+  .then(([shipmentsText, deliveriesFromGitHub, hiddenFromGitHub, archivedFromGitHub, rulesFromGitHub, centersFromGitHub, notesFromGitHub]) => {
     let data;
     try { data = JSON.parse(shipmentsText); } catch(e) {
       try { data = JSON.parse(shipmentsText.replace(/'/g, '"')); } catch(e2) { data = []; }
@@ -881,11 +912,39 @@ function loadData() {
       centerRegion = centersFromGitHub.centerRegion || centerRegion;
     }
 
+    // ── NOTES: load from GitHub + one-time localStorage migration ──
+    const remoteNotes = (notesFromGitHub && typeof notesFromGitHub === 'object' && !Array.isArray(notesFromGitHub))
+      ? notesFromGitHub : {};
+    const localRaw = localStorage.getItem('ud-notes-v10');
+    if (localRaw) {
+      // Legacy localStorage notes — migrate to GitHub keyed by normalized tracking number
+      let localNotes = {};
+      try { localNotes = JSON.parse(localRaw); } catch(e) {}
+      const migrated = { ...remoteNotes };
+      Object.entries(localNotes).forEach(([localKey, noteObj]) => {
+        const match = allShipments.find(s => s.id === localKey || s.id.replace(/[^a-z0-9]/gi,'-') === localKey);
+        if (match && match.tracking) {
+          const tk = normTrack(match.tracking);
+          if (!migrated[tk]) migrated[tk] = noteObj; // don't overwrite remote
+        } else {
+          if (!migrated[localKey]) migrated[localKey] = noteObj; // keep unmapped so nothing is lost
+        }
+      });
+      notesLog = migrated;
+      localStorage.removeItem('ud-notes-v10'); // migration complete — clear local
+      scheduleNotesFlush();
+      console.log('Notes migrated from localStorage to GitHub:', Object.keys(migrated).length, 'entries');
+    } else {
+      notesLog = remoteNotes;
+    }
+
     const normalizeKey = k => (k||'').replace(/[\s\-]/g,'').toUpperCase();
     const deliveriesByTracking = {};
-    Object.entries(deliveriesFromGitHub).forEach(([k, v]) => {
-      deliveriesByTracking[normalizeKey(k)] = v;
-    });
+    if (deliveriesFromGitHub && typeof deliveriesFromGitHub === 'object') {
+      Object.entries(deliveriesFromGitHub).forEach(([k, v]) => {
+        deliveriesByTracking[normalizeKey(k)] = v;
+      });
+    }
 
     allShipments = [];
     const items = Array.isArray(data) ? data : (data.value || []);
@@ -1090,38 +1149,42 @@ function confirmMarkDelivered() {
 }
 document.getElementById('deliver-name').addEventListener('keydown', e => { if (e.key === 'Enter') confirmMarkDelivered(); });
 
-function toggleNoteBar(id) {
-  const bar = document.getElementById('note-bar-'+id);
+function toggleNoteBar(sid) {
+  const bar = document.getElementById('note-bar-'+sid);
   if (!bar) return;
   const isOpen = bar.classList.contains('open');
   bar.classList.toggle('open', !isOpen);
   if (!isOpen) {
-    const note = notesLog[id] || {};
+    const tk = trackingKeyForSid(sid);
+    const note = notesLog[tk] || {};
     bar.querySelector('.note-initials').value = note.by || '';
     bar.querySelector('.note-text').value = note.text || '';
     bar.querySelector('.note-text').focus();
   }
 }
-function saveNote(id) {
-  const bar = document.getElementById('note-bar-'+id);
+function saveNote(sid) {
+  const bar = document.getElementById('note-bar-'+sid);
   if (!bar) return;
-  const by = bar.querySelector('.note-initials').value.trim().toUpperCase();
+  const by   = bar.querySelector('.note-initials').value.trim().toUpperCase();
   const text = bar.querySelector('.note-text').value.trim();
-  if (text) { notesLog[id] = { by, text }; } else { delete notesLog[id]; }
-  saveLocal();
-  const btn = document.getElementById('note-btn-'+id);
-  const display = document.getElementById('note-display-'+id);
-  if (btn) btn.classList.toggle('has-note', !!notesLog[id]);
+  const tk   = trackingKeyForSid(sid);
+  if (text) { notesLog[tk] = { by, text }; } else { delete notesLog[tk]; }
+  scheduleNotesFlush();
+  const btn     = document.getElementById('note-btn-'+sid);
+  const display = document.getElementById('note-display-'+sid);
+  if (btn) btn.classList.toggle('has-note', !!notesLog[tk]);
   if (display) {
-    if (notesLog[id]) { display.classList.add('visible'); display.querySelector('td').innerHTML = notesLog[id].by ? `<span class="note-author">${notesLog[id].by}:</span>${notesLog[id].text}` : notesLog[id].text; }
+    if (notesLog[tk]) { display.classList.add('visible'); display.querySelector('td').innerHTML = notesLog[tk].by ? `<span class="note-author">${notesLog[tk].by}:</span>${notesLog[tk].text}` : notesLog[tk].text; }
     else { display.classList.remove('visible'); }
   }
 }
-function clearNote(id) {
-  delete notesLog[id]; saveLocal();
-  const bar = document.getElementById('note-bar-'+id);
-  const display = document.getElementById('note-display-'+id);
-  const btn = document.getElementById('note-btn-'+id);
+function clearNote(sid) {
+  const tk = trackingKeyForSid(sid);
+  delete notesLog[tk];
+  scheduleNotesFlush();
+  const bar     = document.getElementById('note-bar-'+sid);
+  const display = document.getElementById('note-display-'+sid);
+  const btn     = document.getElementById('note-btn-'+sid);
   if (bar) { bar.querySelector('.note-initials').value=''; bar.querySelector('.note-text').value=''; bar.classList.remove('open'); }
   if (display) display.classList.remove('visible');
   if (btn) btn.classList.remove('has-note');
@@ -1136,22 +1199,23 @@ function toggleScardNote(sid) {
 function saveScardNote(sid) {
   const exp = document.getElementById('scard-note-expand-'+sid);
   if (!exp) return;
-  const by = exp.querySelector('.scard-note-init').value.trim().toUpperCase();
+  const by   = exp.querySelector('.scard-note-init').value.trim().toUpperCase();
   const text = exp.querySelector('.scard-note-txt').value.trim();
-  const matchKey = allShipments.find(s=>s.id.replace(/[^a-z0-9]/gi,'-')===sid)?.id || sid;
-  if (text) { notesLog[matchKey] = { by, text }; } else { delete notesLog[matchKey]; }
-  saveLocal();
+  const tk   = trackingKeyForSid(sid);
+  if (text) { notesLog[tk] = { by, text }; } else { delete notesLog[tk]; }
+  scheduleNotesFlush();
   const btn = document.getElementById('scard-note-btn-'+sid);
-  if (btn) btn.classList.toggle('has-note', !!notesLog[matchKey]);
+  if (btn) btn.classList.toggle('has-note', !!notesLog[tk]);
   const display = exp.querySelector('.scard-note-display') || (() => { const d = document.createElement('div'); d.className='scard-note-display'; exp.insertBefore(d, exp.querySelector('.scard-note-inputs')); return d; })();
-  if (notesLog[matchKey]) { display.style.display='block'; display.innerHTML = notesLog[matchKey].by ? `<span class="note-author">${notesLog[matchKey].by}:</span>${notesLog[matchKey].text}` : notesLog[matchKey].text; }
+  if (notesLog[tk]) { display.style.display='block'; display.innerHTML = notesLog[tk].by ? `<span class="note-author">${notesLog[tk].by}:</span>${notesLog[tk].text}` : notesLog[tk].text; }
   else { display.style.display='none'; }
 }
 function clearScardNote(sid) {
+  const tk  = trackingKeyForSid(sid);
+  delete notesLog[tk];
+  scheduleNotesFlush();
   const exp = document.getElementById('scard-note-expand-'+sid);
   const btn = document.getElementById('scard-note-btn-'+sid);
-  const matchKey = allShipments.find(s=>s.id.replace(/[^a-z0-9]/gi,'-')===sid)?.id || sid;
-  delete notesLog[matchKey]; saveLocal();
   if (exp) { exp.querySelector('.scard-note-init').value=''; exp.querySelector('.scard-note-txt').value=''; const d=exp.querySelector('.scard-note-display'); if(d) d.style.display='none'; exp.classList.remove('open'); }
   if (btn) btn.classList.remove('has-note');
 }
@@ -1219,7 +1283,8 @@ function render() {
           const exp  = expectedDelivery(s.shipDate,s.center)||'—';
           const od   = isOverdue(s);
           const dlv  = deliveredLog[s.id];
-          const note = notesLog[s.id];
+          const tk   = normTrack(s.tracking);
+          const note = notesLog[tk];
           const sid  = s.id.replace(/[^a-z0-9]/gi,'-');
           const dupe = isDupe(s.tracking);
           const actionCell = dlv
@@ -1256,7 +1321,8 @@ function render() {
           const exp  = expectedDelivery(s.shipDate,s.center)||'—';
           const od   = isOverdue(s);
           const dlv  = deliveredLog[s.id];
-          const note = notesLog[s.id];
+          const tk   = normTrack(s.tracking);
+          const note = notesLog[tk];
           const sid  = s.id.replace(/[^a-z0-9]/gi,'-');
           const dupe = isDupe(s.tracking);
           const statusLabel = dlv ? 'Delivered' : od ? 'Overdue' : s.status;
